@@ -11,15 +11,37 @@ StatusHubの共通アクセス設定（[access-control.md](./access-control.md)�
 
 | アプリ | 状況 | 導入Issue/PR |
 | --- | --- | --- |
-| StatusHub（status-hub） | 本番検証待ち（#489でマージ済み） | status-hub#489 |
-| yoteiflow（**代表アプリ**） | 導入Issue起票済み | guchi-apps/yoteiflow#941 |
-| morrow / dayspan / car-care / issue-deck / db-console / research-desk（work-relay） | 未着手 | 代表の結果を見て起票 |
-| aide / myroom / signaly / clip-hive | 未着手 | 同上 |
-| asset-manager / meisai-lab | 方針確認中 | 同上 |
+| StatusHub（status-hub） | 移行済み（本番検証待ち） | status-hub#489 |
+| yoteiflow（**代表アプリ**。旧 dayspan） | 移行済み（本番検証待ち）。旧 `ALLOWED_GOOGLE_EMAILS` も整理済み | guchi-apps/yoteiflow#941・#984・#1006・#1012 |
+| morrow | 未着手 | guchi-apps/morrow#513 |
+| car-care | 未着手 | guchi-apps/car-care#237 |
+| issue-deck | 未着手 | guchi-apps/issue-deck#4022 |
+| db-console | 未着手 | guchi-apps/db-console#191 |
+| research-desk（work-relay） | 未着手 | guchi-apps/work-relay#281 |
+| aide | 未着手 | guchi-apps/aide#576 |
+| myroom（kurashio） | 未着手 | guchi-apps/kurashio#718 |
+| signaly | 未着手 | guchi-apps/signaly#319 |
+| clip-hive | 未着手 | guchi-apps/clip-hive#184 |
+| asset-manager / meisai-lab | 方針確認中（導入Issueは未起票） | 方針が決まってから起票 |
 
 - 代表は、構造が標準的で判定箇所が小さく、アーカイブされていない yoteiflow とした。先行導入と検証の結果を、残りのアプリの導入Issueに反映する
 - アーカイブ済み・静的サイト・未実装のアプリは対象外
 - 管理画面「アプリ」タブでは、導入が済んでいないアプリは「未連携」と表示される
+
+**本番検証は status-hub#531（手作業）で追跡する。** 検証が済むまで、StatusHubとyoteiflowを「本番検証済み」にしない。
+「未着手」の各アプリは上の導入Issueで追跡する（status-hub#490は閉じたまま。残作業の追跡先は上の表と各Issue）。
+
+## Epic #488 の完了条件との対応
+
+| 完了条件 | 状況 |
+| --- | --- |
+| 管理基盤（#489）・導入基盤と移行CLI（#490）が完了している | 達成（マージ済み） |
+| StatusHubから追加・変更・取り消しを行い、対象アプリで実際の許可・拒否が変わる | StatusHub・yoteiflow は本番検証待ち（#531）。他は未導入 |
+| ログイン済み利用者にも最大反映時間内で取り消しが効く | 本番検証待ち（#531） |
+| 権限のない利用者・未登録利用者・設定取得失敗・復旧手順の検証 | 自動テストで検証済み。本番での確認は #531 |
+| 対象一覧・移行結果・残作業・運用手順の記録と本番反映の確認 | 一覧・手順はこの文書。本番反映の確認は未完 |
+
+**PRのマージだけでEpicを完了としない。** 上の導入Issueと #531 が済むまでEpicは開いたままにする。
 
 ## 導入の共通ルール
 
