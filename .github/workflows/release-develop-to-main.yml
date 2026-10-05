@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   release:
-    uses: guchi-apps/issue-deck/.github/workflows/reusable-release-develop-to-main.yml@workflows/v43
+    uses: guchi-apps/issue-deck/.github/workflows/reusable-release-develop-to-main.yml@workflows/v44
     # バージョンの読み書きに関する3つのinput（version-file・version-query・bump-command）は
     # すべて既定値でよい。ルートのpackage.jsonに version を持ち、npmを使い、`preversion`を
     # 持たないため。**共有ワークフローはバージョンbumpのために依存関係をインストールしない**

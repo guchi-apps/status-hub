@@ -51,7 +51,7 @@ on:
 
 jobs:
   review:
-    uses: guchi-apps/issue-deck/.github/workflows/reusable-claude-review-develop.yml@workflows/v43
+    uses: guchi-apps/issue-deck/.github/workflows/reusable-claude-review-develop.yml@workflows/v44
     with:
       # 差分があれば毎回レビューする（冒頭コメント参照。#233）。
       review-file-threshold: "1"
@@ -80,7 +80,7 @@ jobs:
         ^scripts/sync-github-secrets\.sh$ :: シークレット同期スクリプトの変更 (scripts/sync-github-secrets.sh)
       # 上の uses: と同じタグを指定する。片方だけ上げると新しいワークフローで
       # 古いプロンプトが使われる。
-      prompts-ref: workflows/v43
+      prompts-ref: workflows/v44
     secrets: inherit
     permissions:
       contents: write

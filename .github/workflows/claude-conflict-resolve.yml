@@ -66,7 +66,7 @@ on:
 
 jobs:
   conflict-resolve:
-    uses: guchi-apps/issue-deck/.github/workflows/reusable-claude-conflict-resolve.yml@workflows/v43
+    uses: guchi-apps/issue-deck/.github/workflows/reusable-claude-conflict-resolve.yml@workflows/v44
     with:
       # ops-dashboardはprisma/を持たずDBを使わないため node。node-dbにすると不要な
       # MySQLサービスコンテナの起動・マイグレーション・シードが動く。**minimalにはできない**
@@ -95,7 +95,7 @@ jobs:
         UPTIMEKUMA_DASHBOARD_SLUG=dummy-slug
         SYSTEM_STATS_DISK_PATH=/
       # 上の uses: と同じタグを指定する。
-      prompts-ref: workflows/v43
+      prompts-ref: workflows/v44
     # CLAUDE_CODE_OAUTH_TOKEN・WORKFLOW_PAT・PROGRESS_REPORT_SECRETを呼ばれる側へ渡す。
     secrets: inherit
     permissions:

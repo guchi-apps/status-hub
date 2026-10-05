@@ -34,7 +34,7 @@ on:
 
 jobs:
   dispatch:
-    uses: guchi-apps/issue-deck/.github/workflows/reusable-issue-dispatch.yml@workflows/v43
+    uses: guchi-apps/issue-deck/.github/workflows/reusable-issue-dispatch.yml@workflows/v44
     with:
       # ops-dashboardはprisma/を持たずDBを使わないため node。node-dbにすると不要な
       # MySQLサービスコンテナの起動・マイグレーション・シードが動く。
@@ -47,7 +47,7 @@ jobs:
       # .nvmrcを読むが、**共有ワークフローは.nvmrcを読まない**ため、ここに同じ値を明示する。
       node-version: "22.23.1"
       # uses: のタグと必ず同じ値にする。
-      prompts-ref: workflows/v43
+      prompts-ref: workflows/v44
     # CLAUDE_CODE_OAUTH_TOKEN・WORKFLOW_PATを呼ばれる側へ渡す。
     secrets: inherit
     permissions:
