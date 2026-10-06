@@ -11,8 +11,8 @@ StatusHubの共通アクセス設定（[access-control.md](./access-control.md)�
 
 | アプリ | 状況 | 導入Issue/PR |
 | --- | --- | --- |
-| StatusHub（status-hub） | 移行済み（本番検証は一部確認済み・取り消しの確認待ち。確認日 2026-10-06） | status-hub#489・#531 |
-| yoteiflow（**代表アプリ**。旧 dayspan） | 移行済み（本番検証は一部確認済み・取り消しの確認待ち。確認日 2026-10-06）。旧 `ALLOWED_GOOGLE_EMAILS` も整理済み | guchi-apps/yoteiflow#941・#984・#1006・#1012 |
+| StatusHub（status-hub） | 移行済み（本番検証は一部確認済み・取り消しの確認待ち（#541）。確認日 2026-10-06） | status-hub#489・#531 |
+| yoteiflow（**代表アプリ**。旧 dayspan） | 移行済み（本番検証は一部確認済み・取り消しの確認待ち（#541）。確認日 2026-10-06）。旧 `ALLOWED_GOOGLE_EMAILS` も整理済み | guchi-apps/yoteiflow#941・#984・#1006・#1012 |
 | morrow | 未着手 | guchi-apps/morrow#513 |
 | car-care | 未着手 | guchi-apps/car-care#237 |
 | issue-deck | 未着手 | guchi-apps/issue-deck#4022 |
@@ -31,7 +31,7 @@ StatusHubの共通アクセス設定（[access-control.md](./access-control.md)�
 **本番検証は status-hub#531（手作業）で追跡する。** 2026-10-06 に次を確認した。
 管理画面で status-hub・yoteiflow が「反映済み」で最終確認が5分以内／許可した利用者のログイン／復旧CLI（`scripts/access-recover.mjs show`）が通常経路と独立して動くこと。
 一方、**ログイン済み利用者の取り消しが最大反映時間内に効くこと、取り消しが他アプリのセッションを失効させないことは、#531 で未確認のまま完了とした。**
-この2点を確かめるまで、StatusHubとyoteiflowを「本番検証済み」にしない（確認できたら上の表を更新する）。
+この2点は status-hub#541（手作業）で追跡する。確かめるまで、StatusHubとyoteiflowを「本番検証済み」にしない（確認できたら上の表を更新する）。
 「未着手」の各アプリは上の導入Issueで追跡する（status-hub#490は閉じたまま。残作業の追跡先は上の表と各Issue）。
 
 ## Epic #488 の完了条件との対応
