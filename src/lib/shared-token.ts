@@ -134,6 +134,19 @@ export function accessAppTokenName(appId: string): string {
 
 export type SharedTokenWriteResult = { ok: true; name: string } | { ok: false; name: string; reason: string }
 
+/** 保護対象は、古いトークンを失効させる前にもこの設定検査を行う。 */
+export function sharedTokenWriteConfigurationError(name: string): string | null {
+    if (name !== "ISSUE_DECK_ACCESS_APP_TOKEN") return null
+    if (!process.env.ISSUE_DECK_URL || !process.env.SHARED_TOKEN_API_SECRET) {
+        return "ISSUE_DECK_URL・SHARED_TOKEN_API_SECRET が未設定です"
+    }
+    const secret = process.env.SHARED_TOKEN_WRITE_SECRET
+    if (!secret || secret === process.env.SHARED_TOKEN_API_SECRET) {
+        return "専用の SHARED_TOKEN_WRITE_SECRET を設定してから再発行してください"
+    }
+    return null
+}
+
 /**
  * issue-deckの共有トークンへ値を書き込む（`PUT /api/shared-tokens`。名前があれば置き換え、無ければ作成）。
  * 失敗しても例外は投げない。呼び出し側は発行自体を成功させ、手で登録する案内を出す。
@@ -143,6 +156,8 @@ export async function writeSharedToken(name: string, value: string, description:
     const baseUrl = process.env.ISSUE_DECK_URL
     const secret = process.env.SHARED_TOKEN_API_SECRET
     if (!baseUrl || !secret) return { ok: false, name, reason: "ISSUE_DECK_URL・SHARED_TOKEN_API_SECRET が未設定です" }
+    const configurationError = sharedTokenWriteConfigurationError(name)
+    if (configurationError) return { ok: false, name, reason: configurationError }
     try {
         const res = await fetchWithTimeout(
             `${baseUrl.replace(/\/+$/, "")}/api/shared-tokens`,
@@ -151,6 +166,9 @@ export async function writeSharedToken(name: string, value: string, description:
                 headers: {
                     authorization: `Bearer ${secret}`,
                     "x-shared-token-consumer": "ops-dashboard",
+                    ...(name === "ISSUE_DECK_ACCESS_APP_TOKEN"
+                        ? { "x-shared-token-write-authorization": `Bearer ${process.env.SHARED_TOKEN_WRITE_SECRET}` }
+                        : {}),
                     "content-type": "application/json",
                     accept: "application/json",
                 },

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getAccessDb } from "@/lib/access/db"
 import { handleAdminWrite } from "@/lib/access/admin-route"
-import { accessAppTokenName, writeSharedToken } from "@/lib/shared-token"
+import { accessAppTokenName, sharedTokenWriteConfigurationError, writeSharedToken } from "@/lib/shared-token"
 import { AccessError, issueAppToken, recordSharedTokenWrite, revokeAppToken } from "@/lib/access/policy"
 
 /**
@@ -16,6 +16,9 @@ import { AccessError, issueAppToken, recordSharedTokenWrite, revokeAppToken } fr
 export async function POST(request: Request) {
     return handleAdminWrite(request, async (actor, body) => {
         if (typeof body.id !== "string") throw new AccessError("invalid", "id を指定してください")
+        // 再発行は旧トークンを即失効させるため、設定不備はDB更新の前に拒否する。
+        const configurationError = sharedTokenWriteConfigurationError(accessAppTokenName(body.id))
+        if (configurationError) throw new AccessError("invalid", configurationError)
         const db = getAccessDb()
         const token = issueAppToken(db, actor, body.id, new Date())
         // 書き込みに失敗しても発行は成功のまま返す。平文は画面に1回だけ出し、手で登録してもらう
