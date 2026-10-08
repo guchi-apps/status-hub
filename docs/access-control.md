@@ -103,3 +103,9 @@ node scripts/access-recover.mjs set-environment production    # 環境名の食�
 
 ログイン成功は `login_events`（アクセスDB。直近200件）へ残り、アクセス管理の「ログイン履歴」タブで見られる。同じメールで初めて見る接続元IPは `new_ip`（「新しい接続元」）。
 管理者の端末へはWeb Pushで知らせる（`src/lib/login-notify.ts`）。端末ごとに「毎回／新しい接続元のみ／オフ」を通知メニューで選ぶ（既定は毎回）。記録・送信の失敗でログインは止めない。接続元IPは `X-Forwarded-For` の末尾から読む。
+
+### IssueDeck自身のトークン更新（#551）
+
+`ISSUE_DECK_ACCESS_APP_TOKEN`の更新は、通常のBearerに加え、`X-Shared-Token-Write-Authorization: Bearer <SHARED_TOKEN_WRITE_SECRET>`で認証する。専用キーは`op://apps/issue-deck/shared-token-write-secret`を正とし、StatusHubとIssueDeckだけに配備する。共有トークンDB・GET APIには置かず、読み取りキーと共用しない。
+
+未設定・読み取りキーと同じ値のときは、発行前に拒否して旧トークンを保つ。両サーバーとGitHub Secretへ同一の専用キーを配備し、StatusHub送信側→IssueDeck受信側の順で反映する。受信側の専用認証対応が未反映・未設定の間は再発行しない。環境変数の存在検査だけでは相手側の値一致や疎通は保証できないため、配備完了後に正規更新と認証拒否を確認する。
