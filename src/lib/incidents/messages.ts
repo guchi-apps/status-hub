@@ -1,8 +1,8 @@
 import type { PushMessage } from "@/lib/push/web-push"
 import type { HostEvent } from "@/lib/incidents/types"
 
-/** 通知をタップしたときに開く。ホストタブを出し、ヘッダーのエラー一覧を開く */
-export const INCIDENTS_URL = "/?tab=hosts&panel=incidents"
+/** 通知をタップしたときに開く。ホストタブを出す */
+export const INCIDENTS_URL = "/?tab=hosts"
 
 export function formatJst(iso: string): string {
     const time = new Date(iso)
