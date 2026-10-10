@@ -11,6 +11,7 @@ import { HeaderMenu } from "@/components/header-menu"
 import { HostCard } from "@/components/host-card"
 import { HostStats } from "@/components/host-stats"
 import { IncidentButton, IncidentPanel, useIncidents } from "@/components/incidents"
+import { ModelPriceMenuItem } from "@/components/model-price-dialog"
 import { MonitorSections } from "@/components/monitor-sections"
 import { MonitorTiles, getMonitorStatusText } from "@/components/monitor-tiles"
 import { OnePasswordUsage } from "@/components/onepassword-usage"
@@ -303,6 +304,7 @@ export function DashboardShell({
                             controlsId={incidentsPanelId}
                         />
                         <HeaderMenu userEmail={userEmail} isAdmin={isAdmin}>
+                            <ModelPriceMenuItem />
                             <UsageNotifications isAdmin={isAdmin} />
                         </HeaderMenu>
                     </div>

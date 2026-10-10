@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
+import { rejectCrossSiteRequest } from "@/lib/csrf"
 import { requireSessionForApi } from "@/lib/session"
-import { getPriceWatchView } from "@/lib/ai-app-usage/price-watch/run"
+import { getPriceWatchView, refreshModelPriceWatch } from "@/lib/ai-app-usage/price-watch/run"
 
 export const dynamic = "force-dynamic"
 
@@ -18,5 +19,23 @@ export async function GET() {
     } catch (error) {
         console.error("Model price watch read error:", error)
         return NextResponse.json({ error: "Failed to read model price watch" }, { status: 500 })
+    }
+}
+
+/**
+ * 画面の「更新」ボタン。公式の料金ページを今すぐ確認して結果を返す（#561）。
+ * 予定時刻の記録は進めず、直近の実行から60秒以内なら実行せずに保存済みの結果を返す。
+ */
+export async function POST(request: Request) {
+    const { response } = await requireSessionForApi()
+    if (response) return response
+    const rejected = rejectCrossSiteRequest(request)
+    if (rejected) return rejected
+
+    try {
+        return NextResponse.json(await refreshModelPriceWatch(), { headers: { "Cache-Control": "no-store" } })
+    } catch (error) {
+        console.error("Model price watch refresh error:", error)
+        return NextResponse.json({ error: "Failed to refresh model price watch" }, { status: 500 })
     }
 }

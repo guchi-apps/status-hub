@@ -7,21 +7,9 @@ import { ArrowLeft, Pencil, Plus, Trash2, X } from "lucide-react"
 import { AiAppUsageView } from "@/components/ai-app-usage-view"
 import { useDashboardData } from "@/components/dashboard-data"
 import { SkeletonBar, SkeletonGroup } from "@/components/skeleton"
-import { ModelPriceWatch } from "@/components/model-price-watch"
 import { SectionHeading } from "@/components/section-heading"
 import { Button } from "@/components/ui/button"
-import { listModels, type ModelFamily, type ModelInfo } from "@/lib/ai-app-usage/models"
 import type { AiAppUsageSource } from "@/lib/ai-app-usage/sources"
-import { cn } from "@/lib/utils"
-
-/** モデルの系統ごとの色。一覧に無いモデルは無彩色にして、色だけで区別しない（名前も必ず出す） */
-const FAMILY_DOT: Record<ModelFamily, string> = {
-    opus: "bg-[#8ea2ee]",
-    sonnet: "bg-[#4cc5b6]",
-    haiku: "bg-[#e3bd58]",
-    jev: "bg-[#ee8fb0]",
-    gpt: "bg-[#f0a15c]",
-}
 
 export { AiAppUsageView }
 
@@ -175,107 +163,6 @@ function AiAppUsageSourcesModal({ onClose, onSaved }: { onClose: () => void; onS
     )
 }
 
-function formatPrice(value: number): string {
-    if (value === 0) return "無料"
-    return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}`
-}
-
-const PRICE_COLUMNS: { key: keyof ModelInfo["price"]; label: string; short: string }[] = [
-    { key: "input", label: "入力", short: "入力" },
-    { key: "output", label: "出力", short: "出力" },
-    { key: "cacheWrite", label: "キャッシュ書込", short: "書込" },
-    { key: "cacheRead", label: "キャッシュ読出", short: "読出" },
-]
-
-const PRICE_ROW = "grid grid-cols-2 gap-x-4 gap-y-1.5 px-4 py-2.5 text-xs md:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))] md:items-center md:gap-x-2"
-
-/**
- * モデルの単価表（100万トークンあたり・USD）。概算金額の計算に使う一覧をそのまま出す。
- * 連携先の取得結果には依存しないため、取得前や連携先0件のときも表示する。
- */
-export function ModelPriceTable() {
-    const models = listModels()
-    const providers = [...new Set(models.map((info) => info.provider))]
-    const [filter, setFilter] = useState<string | null>(null)
-    const groups = providers
-        .filter((provider) => filter === null || provider === filter)
-        .map((provider) => ({ provider, models: models.filter((info) => info.provider === provider) }))
-
-    return (
-        <section className="space-y-3 sm:space-y-4">
-            <SectionHeading
-                title="モデル単価表"
-                trailing={
-                    <div role="group" aria-label="提供元で絞り込み" className="flex flex-wrap gap-1.5">
-                        {[null, ...providers].map((provider) => (
-                            <button
-                                key={provider ?? "all"}
-                                type="button"
-                                aria-pressed={filter === provider}
-                                onClick={() => setFilter(provider)}
-                                className={cn(
-                                    "rounded-full border px-2.5 py-px text-[11px] focus-visible:outline-2 focus-visible:outline-ring",
-                                    filter === provider
-                                        ? "border-primary bg-primary font-semibold text-primary-foreground"
-                                        : "border-border bg-card text-muted-foreground hover:text-foreground"
-                                )}
-                            >
-                                {provider ?? "すべて"}
-                            </button>
-                        ))}
-                    </div>
-                }
-            />
-            <ModelPriceWatch />
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-                <div className={cn(PRICE_ROW, "hidden border-b border-border bg-muted py-2 text-[10px] uppercase tracking-[0.1em] text-muted-foreground md:grid")} aria-hidden>
-                    <span>モデル</span>
-                    {PRICE_COLUMNS.map((column) => (
-                        <span key={column.key} className="text-right">{column.label}</span>
-                    ))}
-                </div>
-                {groups.map((group) => (
-                    <div key={group.provider}>
-                        <p className="flex justify-between gap-2 bg-muted px-4 py-1.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                            <span>{group.provider}</span>
-                            <span>{group.models.length} モデル</span>
-                        </p>
-                        <ul>
-                            {group.models.map((info) => (
-                                <li key={info.id} className={cn(PRICE_ROW, "border-t border-border")}>
-                                    <span className="col-span-2 flex min-w-0 items-center gap-2 md:col-span-1">
-                                        <span className={cn("size-2 shrink-0 rounded-[2px]", FAMILY_DOT[info.family])} aria-hidden />
-                                        <b className="whitespace-nowrap text-[13px] font-semibold">{info.label}</b>
-                                        {info.note && (
-                                            <span className="shrink-0 whitespace-nowrap rounded-full border border-amber-500/40 px-1.5 text-[10px] text-amber-400">
-                                                {info.note}
-                                            </span>
-                                        )}
-                                        <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">{info.id}</span>
-                                    </span>
-                                    {PRICE_COLUMNS.map((column) => (
-                                        <span
-                                            key={column.key}
-                                            className="flex justify-between gap-2 border-b border-dashed border-border pb-0.5 md:block md:border-b-0 md:pb-0 md:text-right"
-                                        >
-                                            <span className="text-[11px] text-muted-foreground md:hidden">{column.short}</span>
-                                            <span className="font-mono tabular-nums">{formatPrice(info.price[column.key])}</span>
-                                        </span>
-                                    ))}
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                ))}
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-                100万トークンあたりの単価（USD）。単価表に無いモデルの金額は「—」で、近いモデルの単価では推測しません。
-                「換算の目安」はChatGPTの定額枠で動くため請求が発生しないモデル、「出典未確認」は公式の単価を確かめられていないモデルです。
-            </p>
-        </section>
-    )
-}
-
 /** アプリごとのAI利用。どのアプリが、どのモデルで、どれだけ使っているかを見る。 */
 export function AiAppUsage() {
     const { aiAppUsage: snapshot, refreshAiAppUsage } = useDashboardData()
@@ -286,7 +173,6 @@ export function AiAppUsage() {
         return (
             <>
                 <AiAppUsageView snapshot={snapshot} onManageSources={() => setSettingsOpen(true)} />
-                <ModelPriceTable />
                 {settingsOpen && <AiAppUsageSourcesModal onClose={() => setSettingsOpen(false)} onSaved={onSaved} />}
             </>
         )
@@ -309,7 +195,6 @@ export function AiAppUsage() {
                     <SkeletonBar />
                 </SkeletonGroup>
             </section>
-            <ModelPriceTable />
             {settingsOpen && <AiAppUsageSourcesModal onClose={() => setSettingsOpen(false)} onSaved={onSaved} />}
         </>
     )
