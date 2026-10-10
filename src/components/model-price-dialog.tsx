@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronRight, RefreshCw, Table2, X } from "lucide-react"
+import { ChevronRight, Eye, EyeOff, RefreshCw, Table2, X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { MENU_ITEM_CLASS, useHeaderMenu } from "@/components/header-menu"
@@ -8,7 +8,8 @@ import { ModelPriceWatch } from "@/components/model-price-watch"
 import { Button } from "@/components/ui/button"
 import { CSRF_HEADERS } from "@/lib/csrf-headers"
 import { listModels, type ModelFamily, type ModelInfo } from "@/lib/ai-app-usage/models"
-import type { PriceWatchView } from "@/lib/ai-app-usage/price-watch/run"
+import type { PriceModelRow, PriceWatchView } from "@/lib/ai-app-usage/price-watch/run"
+import type { PriceCandidate } from "@/lib/ai-app-usage/price-watch/types"
 import { cn } from "@/lib/utils"
 
 /**
@@ -70,10 +71,15 @@ export function ModelPriceMenuItem() {
 }
 
 function ModelPriceDialog({ onClose }: { onClose: () => void }) {
-    const models = listModels()
-    const providers = [...new Set(models.map((info) => info.provider))]
     const [filter, setFilter] = useState<string | null>(null)
     const [view, setView] = useState<PriceWatchView | null>(null)
+    const [showHidden, setShowHidden] = useState(false)
+    const [acting, setActing] = useState(false)
+    // 追加・非表示を反映した一覧はサーバーが返す。取得できていない間は組み込みの一覧で表だけ出す
+    const allModels: PriceModelRow[] = view?.models ?? listModels().map((info) => ({ ...info, hidden: false, added: false }))
+    const hiddenCount = allModels.filter((info) => info.hidden).length
+    const models = allModels.filter((info) => showHidden || !info.hidden)
+    const providers = [...new Set(models.map((info) => info.provider))]
     const [failed, setFailed] = useState(false)
     const [refreshing, setRefreshing] = useState(false)
     const [message, setMessage] = useState<string | null>(null)
@@ -117,6 +123,28 @@ function ModelPriceDialog({ onClose }: { onClose: () => void }) {
         }
     }
 
+    const act = async (body: Record<string, string>) => {
+        setActing(true)
+        setMessage(null)
+        try {
+            const response = await fetch("/api/model-price-watch/actions", {
+                method: "POST",
+                headers: { ...CSRF_HEADERS, "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            })
+            if (!response.ok) {
+                const detail = (await response.json().catch(() => null)) as { error?: string } | null
+                throw new Error(detail?.error ?? String(response.status))
+            }
+            setView((await response.json()) as PriceWatchView)
+        } catch (reason) {
+            console.error("モデル単価表の操作に失敗しました:", reason)
+            setMessage(reason instanceof Error && reason.message ? `操作できませんでした（${reason.message}）` : "操作できませんでした。")
+        } finally {
+            setActing(false)
+        }
+    }
+
     const groups = providers
         .filter((provider) => filter === null || provider === filter)
         .map((provider) => ({ provider, models: models.filter((info) => info.provider === provider) }))
@@ -156,7 +184,13 @@ function ModelPriceDialog({ onClose }: { onClose: () => void }) {
                             {message}
                         </p>
                     )}
-                    <ModelPriceWatch view={view} failed={failed} />
+                    <ModelPriceWatch
+                        view={view}
+                        failed={failed}
+                        busy={acting}
+                        onAdd={(candidate: PriceCandidate) => void act({ action: "add-candidate", key: candidate.key })}
+                        onHide={(candidate: PriceCandidate) => void act({ action: "hide-candidate", key: candidate.key })}
+                    />
 
                     <div role="group" aria-label="提供元で絞り込み" className="flex flex-wrap gap-1.5">
                         {[null, ...providers].map((provider) => (
@@ -175,6 +209,17 @@ function ModelPriceDialog({ onClose }: { onClose: () => void }) {
                                 {provider ?? "すべて"}
                             </button>
                         ))}
+                        {hiddenCount > 0 && (
+                            <button
+                                type="button"
+                                aria-pressed={showHidden}
+                                onClick={() => setShowHidden((value) => !value)}
+                                className="ml-auto flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-px text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                            >
+                                {showHidden ? <EyeOff className="size-3" aria-hidden /> : <Eye className="size-3" aria-hidden />}
+                                {showHidden ? "非表示を隠す" : `非表示 ${hiddenCount}件を表示`}
+                            </button>
+                        )}
                     </div>
 
                     <div className="overflow-x-auto rounded-xl border border-border bg-card">
@@ -187,21 +232,29 @@ function ModelPriceDialog({ onClose }: { onClose: () => void }) {
                                             {column.label}
                                         </th>
                                     ))}
+                                    <th scope="col" className="px-1.5 py-2 text-right font-semibold sm:px-3">
+                                        <span className="sr-only">操作</span>
+                                    </th>
                                 </tr>
                             </thead>
                             {groups.map((group) => (
                                 <tbody key={group.provider}>
                                     <tr className="bg-muted text-[10px] tracking-[0.08em] text-muted-foreground">
-                                        <th scope="colgroup" colSpan={5} className="px-2 py-1 text-left font-normal sm:px-3">
+                                        <th scope="colgroup" colSpan={6} className="px-2 py-1 text-left font-normal sm:px-3">
                                             {group.provider}　{group.models.length} モデル
                                         </th>
                                     </tr>
                                     {group.models.map((info) => (
-                                        <tr key={info.id} className="border-t border-border">
+                                        <tr key={info.id} className={cn("border-t border-border", info.hidden && "opacity-50")}>
                                             <th scope="row" className="px-2 py-1.5 text-left font-normal sm:px-3">
                                                 <span className="flex items-center gap-1.5">
                                                     <span className={cn("size-2 shrink-0 rounded-[2px]", FAMILY_DOT[info.family])} aria-hidden />
                                                     <b className="whitespace-nowrap text-[12px] font-semibold sm:text-[13px]">{info.label}</b>
+                                                    {info.added && (
+                                                        <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-500/40 px-1.5 text-[10px] text-emerald-400">
+                                                            反映済み
+                                                        </span>
+                                                    )}
                                                     {info.note && (
                                                         <span className="shrink-0 whitespace-nowrap rounded-full border border-amber-500/40 px-1.5 text-[10px] text-amber-400">
                                                             {info.note}
@@ -215,6 +268,17 @@ function ModelPriceDialog({ onClose }: { onClose: () => void }) {
                                                     {formatPrice(info.price[column.key])}
                                                 </td>
                                             ))}
+                                            <td className="px-1.5 py-1.5 text-right sm:px-3">
+                                                <button
+                                                    type="button"
+                                                    disabled={acting}
+                                                    onClick={() => void act({ action: info.hidden ? "show-model" : "hide-model", id: info.id })}
+                                                    aria-label={`${info.label}を${info.hidden ? "再表示" : "非表示"}`}
+                                                    className="whitespace-nowrap rounded-md border border-border px-1.5 py-px text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-ring"
+                                                >
+                                                    {info.hidden ? "再表示" : "非表示"}
+                                                </button>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -224,7 +288,8 @@ function ModelPriceDialog({ onClose }: { onClose: () => void }) {
 
                     <p className="text-[11px] text-muted-foreground">
                         単価表に無いモデルの金額は「—」で、近いモデルの単価では推測しません。
-                        「換算の目安」はChatGPTの定額枠で動くため請求が発生しないモデル、「出典未確認」は公式の単価を確かめられていないモデルです。
+                        「出典未確認」は公式の単価を確かめられていないモデルです。
+                        「非表示」は表から隠すだけで、使用量の概算金額の計算には使い続けます。
                     </p>
                 </div>
             </div>
