@@ -1,5 +1,6 @@
 import { requireSessionForPage } from "@/lib/session"
 import { isAideStatusConfigured } from "@/lib/aide-status"
+import { isAideWorkReportsConfigured } from "@/lib/aide-work-reports"
 import { DashboardDataProvider } from "@/components/dashboard-data"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { fetchUptimeRobotMonitorsServer } from "@/lib/uptimerobot"
@@ -26,7 +27,7 @@ export default async function Home() {
                 // 環境変数から決まるため、ここで解決して渡す
                 addMonitorUrl={getUptimeKumaAddMonitorUrl()}
                 canAddMonitor={isUptimeKumaAdminConfigured()}
-                aideConfigured={isAideStatusConfigured()}
+                aideConfigured={isAideStatusConfigured() || isAideWorkReportsConfigured()}
             />
         </DashboardDataProvider>
     )
