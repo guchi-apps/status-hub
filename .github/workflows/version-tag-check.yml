@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   version-tag-check:
-    uses: guchi-apps/issue-deck/.github/workflows/reusable-version-tag-check.yml@workflows/v48
+    uses: guchi-apps/issue-deck/.github/workflows/reusable-version-tag-check.yml@workflows/v49
     # ルートの package.json に version を持ち、リリースタグは `vX.Y.Z` 形式のため inputs は
     # 全て既定値でよい（version-file: package.json / version-query: .version / tag-prefix: v）。
 
