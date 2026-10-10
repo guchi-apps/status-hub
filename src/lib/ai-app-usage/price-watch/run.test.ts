@@ -5,6 +5,8 @@ import { DEFAULT_SCHEDULE } from "@/lib/ai-app-usage/price-watch/schedule"
 import {
     EMPTY_WATCH_STATE,
     isDue,
+    isManualRunThrottled,
+    MANUAL_MIN_INTERVAL_MS,
     readWatchState,
     runModelPriceWatch,
     summarizeOutcome,
@@ -234,5 +236,42 @@ describe("isDue / summarizeOutcome", () => {
     it("状態ファイルが無ければ空の状態を返す", async (t) => {
         redirectStateFile(t, "MODEL_PRICE_WATCH_PATH")
         assert.deepEqual(await readWatchState(), EMPTY_WATCH_STATE)
+    })
+})
+
+describe("手動更新（#561）", () => {
+    const okFetch = () => makeFetch({ openai: openaiPage([NEW_MODEL]), anthropic: anthropicPage() })
+
+    it("slot（予定時刻と試行回数）を進めず、結果と候補だけを更新する", async (t) => {
+        redirectStateFile(t, "MODEL_PRICE_WATCH_PATH")
+        const { notify } = collectNotify()
+        const failing = makeFetch({ openai: new Error("x"), anthropic: new Error("x") })
+        const scheduled = await runModelPriceWatch({ now: NOW, slotAt: SLOT, notify, fetchText: failing })
+        assert.deepEqual(scheduled.slot, { at: SLOT, attempts: 1 })
+
+        const manual = await runModelPriceWatch({ now: NOW + 3_600_000, manual: true, notify, fetchText: okFetch() })
+        assert.deepEqual(manual.slot, { at: SLOT, attempts: 1 }, "手動は試行回数を数えない")
+        assert.equal(manual.lastRun?.outcome, "candidates")
+        assert.ok(manual.candidates.some((entry) => entry.id === "gpt-7-sol"))
+    })
+
+    it("定期の実行が一度も無くても、手動で slot を作らない（その週の定期実行は予定どおり走る）", async (t) => {
+        redirectStateFile(t, "MODEL_PRICE_WATCH_PATH")
+        const { notify } = collectNotify()
+        const state = await runModelPriceWatch({ now: NOW, manual: true, notify, fetchText: okFetch() })
+        assert.equal(state.slot, null)
+        assert.equal(isDue(state, NOW, DEFAULT_SCHEDULE), true)
+    })
+
+    it("直近の実行（成功・失敗とも）から60秒以内は連打として止める", () => {
+        const at = new Date(NOW).toISOString()
+        const withRun = (outcome: "unchanged" | "failed") => ({
+            ...EMPTY_WATCH_STATE,
+            lastRun: { startedAt: at, finishedAt: at, outcome, providers: [], candidateCount: 0 },
+        })
+        assert.equal(isManualRunThrottled(EMPTY_WATCH_STATE, NOW), false)
+        assert.equal(isManualRunThrottled(withRun("unchanged"), NOW + MANUAL_MIN_INTERVAL_MS - 1), true)
+        assert.equal(isManualRunThrottled(withRun("failed"), NOW + 1_000), true)
+        assert.equal(isManualRunThrottled(withRun("unchanged"), NOW + MANUAL_MIN_INTERVAL_MS), false)
     })
 })

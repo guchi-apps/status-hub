@@ -1,7 +1,14 @@
 "use client"
 
-import { AppResources } from "@/components/app-resources"
+import { useCallback, useState } from "react"
 import { useDashboardData } from "@/components/dashboard-data"
+import { HostDetailDialog } from "@/components/host-detail-dialog"
+import {
+    HOST_DETAIL_TITLES,
+    HostDetailBody,
+    summarizeSystems,
+    type HostDetailKind,
+} from "@/components/host-detail-panels"
 import {
     MetricCard,
     NEUTRAL_METRIC_COLORS,
@@ -11,47 +18,13 @@ import {
 import { SkeletonBar, SkeletonGroup } from "@/components/skeleton"
 import { SectionHeading } from "@/components/section-heading"
 import { Sparkline } from "@/components/sparkline"
-import { StatusBadge, type StatusTone } from "@/components/status-badge"
 import { describeCpu, formatAge, formatBytes, formatUptime } from "@/lib/host-stats/format"
 import { pickSeries as pick, sumSeries } from "@/lib/host-stats/history"
-import { describeTimer, evaluateTimers, type TimerState } from "@/lib/host-stats/timers"
 import { cn } from "@/lib/utils"
-import type { HostStatsHostView, HostStatsTmuxSession } from "@/types/host-stats"
-
-/** 定期ジョブの状態と色の対応。unknown は「壊れている」ではないので警告どまりにする */
-const TIMER_TONES: Record<TimerState, StatusTone> = {
-    ok: "ok",
-    running: "info",
-    failed: "danger",
-    overdue: "danger",
-    stopped: "danger",
-    missing: "danger",
-    unknown: "warn",
-}
+import type { HostStatsHostView } from "@/types/host-stats"
 
 /** 温度グラフの縦軸の最小の幅（℃）。変動が小さいときに波形が暴れて見えないようにする */
 const MIN_TEMPERATURE_SPAN = 10
-
-/** tmuxセッションの経過時間（秒）。作成時刻が読めないホストでは undefined */
-function tmuxAgeSeconds(createdAt?: string): number | undefined {
-    if (!createdAt) return undefined
-
-    const created = Date.parse(createdAt)
-    if (Number.isNaN(created)) return undefined
-
-    return Math.max(0, Math.floor((Date.now() - created) / 1000))
-}
-
-/** バッジの「2窓 · 3h 10m · guchi」の部分。ユーザー名は複数人のセッションが並ぶときだけ出す */
-function formatTmuxDetail(session: HostStatsTmuxSession, withUser: boolean): string {
-    const parts = [`${session.windows}窓`]
-
-    const age = tmuxAgeSeconds(session.createdAt)
-    if (age !== undefined) parts.push(formatUptime(age))
-    if (withUser && session.user) parts.push(session.user)
-
-    return parts.join(" · ")
-}
 
 function formatRate(bytesPerSecond: number): string {
     return `${formatBytes(bytesPerSecond)}/s`
@@ -87,14 +60,15 @@ function HostSection({
     offlineAfterSeconds: number
     historyHours: number
 }) {
+    // 開いている詳細。早期 return より前に置く（フックの呼び出し順を変えないため）
+    const [open, setOpen] = useState<{ kind: HostDetailKind; trigger: HTMLElement } | null>(null)
+    const closeDetail = useCallback(() => setOpen(null), [])
+
     const { latest, history, online } = host
 
     // 保存済みファイルが古い形式・壊れている場合に、画面全体を巻き込んで落とさないための保険
     if (!latest.disks?.length || !latest.loadAverage) return null
 
-    const services = latest.services ?? []
-    // 定期ジョブ。HOST_STATS_TIMERS を設定していないホストでは undefined で届く（#75）
-    const timerStatuses = evaluateTimers(latest.timers)
     const dimmed = !online
     const chartClass = "h-6 w-full"
     const historyLabelSuffix = `直近${historyHours}時間の推移`
@@ -103,7 +77,6 @@ function HostSection({
     const worstDisk = latest.disks.reduce((worst, disk) =>
         disk.usedPercent > worst.usedPercent ? disk : worst
     )
-    const otherDisks = latest.disks.filter((disk) => disk.path !== worstDisk.path)
 
     const loads = pick(history, "load")
     const temperatures = pick(history, "temp")
@@ -114,17 +87,30 @@ function HostSection({
     const networkSeries = sumSeries(pick(history, "rx"), pick(history, "tx"))
     const diskIoSeries = sumSeries(pick(history, "ior"), pick(history, "iow"))
 
-    const { maintenance, sessions, topProcesses, topMemoryProcesses } = latest
+    // オフラインの最後のスナップショットは予定時刻を過ぎているのが当たり前なので、異常として数えない
+    const systems = summarizeSystems(host)
+    const problems = online ? systems.problems : 0
+    const systemsTone: "danger" | "warn" | undefined =
+        problems > 0 ? "danger" : online && systems.notices > 0 ? "warn" : undefined
+    const systemsValue = !online
+        ? "最終値"
+        : problems > 0
+          ? `異常 ${problems}`
+          : systems.notices > 0
+            ? `要確認 ${systems.notices}`
+            : systems.servicesReported || systems.timers > 0
+              ? "正常"
+              : "未取得"
+    const systemsDetail = [
+        systems.servicesReported ? `サービス ${systems.services}` : null,
+        systems.timers > 0 ? `定期ジョブ ${systems.timers}` : null,
+        systems.tmux > 0 ? `tmux ${systems.tmux}` : null,
+    ]
+        .filter((part): part is string => part !== null)
+        .join(" / ")
 
-    // tmux が入っていないホストは undefined で届く。0件のときは行ごと出さない
-    const tmuxSessions = latest.tmuxSessions ?? []
-    const tmuxUserCount = new Set(tmuxSessions.map((session) => session.user).filter(Boolean)).size
-
-    // エージェントが送信上限で切り捨てた分。並んでいるバッジが全てだと思わせないよう件数を出す
-    const tmuxUntracked = Math.max(
-        0,
-        (latest.tmuxSessionTotal ?? tmuxSessions.length) - tmuxSessions.length
-    )
+    const openCard = (kind: HostDetailKind) => (trigger: HTMLElement) => setOpen({ kind, trigger })
+    const labelFor = (kind: HostDetailKind) => `${host.label} の ${HOST_DETAIL_TITLES[kind]} の詳細を開く`
 
     return (
         <section className="space-y-3 sm:space-y-4">
@@ -137,8 +123,16 @@ function HostSection({
                                 OFFLINE
                             </span>
                         )}
+                        {problems > 0 && (
+                            <span className="text-xs font-mono font-semibold px-2 py-1 rounded-md bg-red-500/20 text-red-300 border border-red-500/30">
+                                異常 {problems}
+                            </span>
+                        )}
                         <span className="text-xs font-mono text-muted-foreground truncate">
                             {latest.hostname}
+                        </span>
+                        <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+                            受信 {formatAge(host.ageSeconds)}
                         </span>
                     </>
                 }
@@ -148,13 +142,15 @@ function HostSection({
                 <OfflineBanner ageSeconds={host.ageSeconds} offlineAfterSeconds={offlineAfterSeconds} />
             )}
 
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
                 <MetricCard
                     label="CPU"
                     value={`${latest.cpuPercent}%`}
                     detail={describeCpu(latest.cpuModel, latest.cpuThreads)}
                     valueClassName={getUsageColor(latest.cpuPercent)}
                     dimmed={dimmed}
+                    onOpen={openCard("cpu")}
+                    openLabel={labelFor("cpu")}
                     chart={
                         <Sparkline
                             values={pick(history, "cpu")}
@@ -169,6 +165,8 @@ function HostSection({
                     detail={`${formatBytes(latest.memory.usedBytes)} / ${formatBytes(latest.memory.totalBytes)}`}
                     valueClassName={getUsageColor(latest.memory.usedPercent)}
                     dimmed={dimmed}
+                    onOpen={openCard("memory")}
+                    openLabel={labelFor("memory")}
                     chart={
                         <Sparkline
                             values={pick(history, "mem")}
@@ -184,6 +182,8 @@ function HostSection({
                         detail={`${formatBytes(latest.swap.usedBytes)} / ${formatBytes(latest.swap.totalBytes)}`}
                         valueClassName={getUsageColor(latest.swap.usedPercent)}
                         dimmed={dimmed}
+                        onOpen={openCard("swap")}
+                        openLabel={labelFor("swap")}
                         chart={
                             <Sparkline
                                 values={pick(history, "swap")}
@@ -199,6 +199,8 @@ function HostSection({
                     detail={`${formatBytes(worstDisk.usedBytes)} / ${formatBytes(worstDisk.totalBytes)}（${worstDisk.path}）`}
                     valueClassName={getUsageColor(worstDisk.usedPercent)}
                     dimmed={dimmed}
+                    onOpen={openCard("disk")}
+                    openLabel={labelFor("disk")}
                     chart={
                         <Sparkline
                             values={pick(history, "disk")}
@@ -212,6 +214,8 @@ function HostSection({
                     value={latest.loadAverage[0].toFixed(2)}
                     detail={`1m / 5m / 15m: ${latest.loadAverage.map((value) => value.toFixed(2)).join(" / ")}`}
                     dimmed={dimmed}
+                    onOpen={openCard("load")}
+                    openLabel={labelFor("load")}
                     chart={
                         <Sparkline
                             values={loads}
@@ -227,6 +231,8 @@ function HostSection({
                         value={`↓ ${formatRate(latest.network.inBytesPerSecond)}`}
                         detail={`↑ ${formatRate(latest.network.outBytesPerSecond)}`}
                         dimmed={dimmed}
+                        onOpen={openCard("network")}
+                        openLabel={labelFor("network")}
                         chart={
                             <Sparkline
                                 values={networkSeries}
@@ -243,6 +249,8 @@ function HostSection({
                         value={`R ${formatRate(latest.diskIo.inBytesPerSecond)}`}
                         detail={`W ${formatRate(latest.diskIo.outBytesPerSecond)}`}
                         dimmed={dimmed}
+                        onOpen={openCard("diskIo")}
+                        openLabel={labelFor("diskIo")}
                         chart={
                             <Sparkline
                                 values={diskIoSeries}
@@ -258,6 +266,8 @@ function HostSection({
                     value={formatUptime(latest.uptimeSeconds)}
                     detail={latest.os ?? latest.kernel}
                     dimmed={dimmed}
+                    onOpen={openCard("uptime")}
+                    openLabel={labelFor("uptime")}
                 />
                 {latest.temperatureCelsius !== undefined && (
                     <MetricCard
@@ -265,6 +275,8 @@ function HostSection({
                         value={`${latest.temperatureCelsius}°C`}
                         valueClassName={getTemperatureColor(latest.temperatureCelsius)}
                         dimmed={dimmed}
+                        onOpen={openCard("temp")}
+                        openLabel={labelFor("temp")}
                         chart={
                             <Sparkline
                                 values={temperatures}
@@ -276,99 +288,36 @@ function HostSection({
                         }
                     />
                 )}
+                <MetricCard
+                    label="稼働システム"
+                    value={systemsValue}
+                    valueClassName={
+                        systemsTone === "danger"
+                            ? "text-red-400"
+                            : systemsTone === "warn"
+                              ? "text-amber-400"
+                              : online && systemsValue === "正常"
+                                ? "text-status-ok"
+                                : undefined
+                    }
+                    detail={systemsDetail || undefined}
+                    alert={systemsTone}
+                    dimmed={dimmed}
+                    onOpen={openCard("systems")}
+                    openLabel={labelFor("systems")}
+                />
             </div>
 
-            {/* HOST_STATS_APPS_ROOT を設定していないホスト・古いエージェントでは undefined で届く（#226） */}
-            {latest.apps && <AppResources apps={latest.apps} memory={latest.memory} dimmed={dimmed} />}
-
-            <div className="flex flex-wrap gap-2">
-                {services.map((service) => (
-                    <StatusBadge key={service.name} tone={service.active ? "ok" : "danger"} withDot>
-                        {service.name}
-                        <span className="opacity-70">{service.state}</span>
-                    </StatusBadge>
-                ))}
-                {maintenance?.rebootRequired && <StatusBadge tone="danger">再起動待ち</StatusBadge>}
-                {maintenance?.updatesAvailable !== undefined && maintenance.updatesAvailable > 0 && (
-                    <StatusBadge tone={maintenance.securityUpdatesAvailable ? "danger" : "warn"}>
-                        更新 {maintenance.updatesAvailable}件
-                        {maintenance.securityUpdatesAvailable
-                            ? `（セキュリティ ${maintenance.securityUpdatesAvailable}件）`
-                            : ""}
-                    </StatusBadge>
-                )}
-                {sessions && sessions.count > 0 && (
-                    <StatusBadge tone="neutral">
-                        ログイン {sessions.count}
-                        {sessions.users.length > 0 && `（${sessions.users.join(", ")}）`}
-                    </StatusBadge>
-                )}
-            </div>
-
-            {timerStatuses.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                    {timerStatuses.map((status) => (
-                        <StatusBadge
-                            key={status.timer.name}
-                            tone={TIMER_TONES[status.state]}
-                            withDot
-                        >
-                            <span className="opacity-50">job</span>
-                            {status.timer.name}
-                            <span className="opacity-70">{describeTimer(status)}</span>
-                        </StatusBadge>
-                    ))}
-                </div>
+            {open && (
+                <HostDetailDialog
+                    title={`${host.label} · ${HOST_DETAIL_TITLES[open.kind]}`}
+                    subtitle={`最終受信 ${formatAge(host.ageSeconds)}${online ? "" : "（古い値）"}`}
+                    returnFocusTo={open.trigger}
+                    onClose={closeDetail}
+                >
+                    <HostDetailBody kind={open.kind} host={host} historyHours={historyHours} />
+                </HostDetailDialog>
             )}
-
-            {tmuxSessions.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                    {tmuxSessions.map((session, index) => (
-                        <StatusBadge
-                            key={`${session.user ?? ""}/${session.name}/${index}`}
-                            tone={session.attached ? "ok" : "neutral"}
-                            withDot={session.attached}
-                        >
-                            <span className="opacity-50">tmux</span>
-                            {session.name}
-                            <span className="opacity-70">{formatTmuxDetail(session, tmuxUserCount > 1)}</span>
-                        </StatusBadge>
-                    ))}
-                    {tmuxUntracked > 0 && (
-                        <StatusBadge tone="warn">
-                            送信上限のため 他 {tmuxUntracked}件（全 {latest.tmuxSessionTotal}件）
-                        </StatusBadge>
-                    )}
-                </div>
-            )}
-
-            <p className="text-xs text-muted-foreground">
-                最終受信: {formatAge(host.ageSeconds)}
-                {topProcesses && topProcesses.length > 0 && (
-                    <>
-                        {" / CPU上位: "}
-                        {topProcesses.map((process) => `${process.name} ${process.cpuPercent}%`).join(" · ")}
-                    </>
-                )}
-                {topMemoryProcesses && topMemoryProcesses.length > 0 && (
-                    <>
-                        {" / メモリ上位: "}
-                        {topMemoryProcesses
-                            .map((process) =>
-                                process.memoryBytes === undefined
-                                    ? process.name
-                                    : `${process.name} ${formatBytes(process.memoryBytes)}`
-                            )
-                            .join(" · ")}
-                    </>
-                )}
-                {otherDisks.length > 0 && (
-                    <>
-                        {" / その他のディスク: "}
-                        {otherDisks.map((disk) => `${disk.path} ${disk.usedPercent}%`).join(" · ")}
-                    </>
-                )}
-            </p>
         </section>
     )
 }

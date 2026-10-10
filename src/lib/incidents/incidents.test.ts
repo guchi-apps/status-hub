@@ -128,7 +128,7 @@ describe("ホスト停止・再起動の検知", () => {
         assert.match(message.body, /不明/)
         assert.equal(message.badge, 2)
         assert.equal(message.seq, 7)
-        assert.match(message.url ?? "", /panel=incidents/)
+        assert.match(message.url ?? "", /tab=hosts/)
 
         const down = buildHostMessage({ ...event, kind: "down" }, { count: 1, seq: 8 })
         assert.match(down.body, /特定できません/)
