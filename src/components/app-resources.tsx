@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardCard } from "@/components/dashboard-card"
 import { formatAge, formatBytes } from "@/lib/host-stats/format"
 import { cn } from "@/lib/utils"
 import type { HostStatsApps, HostStatsUsage } from "@/types/host-stats"
@@ -173,70 +172,98 @@ function ResourceBlock({
     )
 }
 
+/** 内訳の無い理由を出す。apps自体が無い（未取得）と、appsはあるが該当行が無い（対象なし）を分ける */
+function EmptyBreakdown({ label, message }: { label: string; message: string }) {
+    return (
+        <div className="space-y-1">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
+            <p className="text-xs text-muted-foreground">{message}</p>
+        </div>
+    )
+}
+
+const FOOTNOTE_CLASS = "border-t border-border pt-2.5 text-[10px] text-muted-foreground sm:text-[11px]"
+
 /**
- * アプリ別のメモリ・ディスク使用量（#226）。ホストタブの指標カードの下に置く。
+ * アプリ別のメモリ内訳（#226・#558）。メモリ詳細の中に置く。
  *
  * 「メモリ上位」のプロセス一覧は next-server や node が並ぶだけでどのアプリか読めないため、
  * エージェントがアプリのディレクトリ単位で集計したものを別に描く。
  */
-export function AppResources({
-    apps,
-    memory,
-    dimmed,
-}: {
-    apps: HostStatsApps
-    memory: HostStatsUsage
-    dimmed?: boolean
-}) {
-    const memoryRows: ResourceRow[] = apps.items
+export function AppMemoryBreakdown({ apps, memory }: { apps?: HostStatsApps; memory: HostStatsUsage }) {
+    if (!apps) {
+        return (
+            <EmptyBreakdown
+                label="Memory · アプリ別"
+                message="アプリ別の内訳は未取得です（このホストはアプリの置き場を設定していないか、対応前のエージェントです）。"
+            />
+        )
+    }
+
+    const rows: ResourceRow[] = apps.items
         .filter((item) => item.memoryBytes > 0)
         .map((item) => ({ name: item.name, bytes: item.memoryBytes, note: `${item.processes}プロセス` }))
         .sort((a, b) => b.bytes - a.bytes)
 
-    const diskRows: ResourceRow[] = apps.items
+    if (rows.length === 0) {
+        return <EmptyBreakdown label="Memory · アプリ別" message="メモリを使っているアプリはありません。" />
+    }
+
+    return (
+        <div className="space-y-3">
+            <ResourceBlock
+                label="Memory · アプリ別"
+                totalLabel="メモリ総量"
+                rows={rows}
+                usage={memory}
+                barClassName="bg-primary"
+            />
+            <p className={FOOTNOTE_CLASS}>
+                アプリのディレクトリで動いているプロセスの使用メモリ（共有分をプロセス数で割ったPSS）の合計。
+            </p>
+        </div>
+    )
+}
+
+/** アプリ別のディスク内訳（#226・#558）。ディスク詳細の中に置く */
+export function AppDiskBreakdown({ apps }: { apps?: HostStatsApps }) {
+    if (!apps) {
+        return (
+            <EmptyBreakdown
+                label="Disk · アプリ別"
+                message="アプリ別の内訳は未取得です（このホストはアプリの置き場を設定していないか、対応前のエージェントです）。"
+            />
+        )
+    }
+
+    const rows: ResourceRow[] = apps.items
         .flatMap((item) => (item.diskBytes ? [{ name: item.name, bytes: item.diskBytes }] : []))
         .sort((a, b) => b.bytes - a.bytes)
 
-    const showMemory = memoryRows.length > 0
-    const showDisk = apps.disk !== undefined && diskRows.length > 0
-    if (!showMemory && !showDisk) return null
+    if (!apps.disk || rows.length === 0) {
+        return (
+            <EmptyBreakdown
+                label="Disk · アプリ別"
+                message="ディスク使用量はまだ測っていません（1時間ごとに計測します）。"
+            />
+        )
+    }
 
     const measuredAge = measuredAgeSeconds(apps.diskMeasuredAt)
 
     return (
-        <DashboardCard className={cn("space-y-4 p-4 sm:p-5", dimmed && "opacity-60")}>
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h3 className="text-sm font-bold sm:text-base">アプリ別リソース</h3>
-                <span className="break-all font-mono text-[10px] text-muted-foreground sm:ml-auto">
-                    {apps.root} 配下をアプリ単位で集計
-                </span>
-            </div>
-
-            <div className={cn("grid gap-6", showMemory && showDisk && "lg:grid-cols-2 lg:gap-8")}>
-                {showMemory && (
-                    <ResourceBlock
-                        label="Memory · アプリ別"
-                        totalLabel="メモリ総量"
-                        rows={memoryRows}
-                        usage={memory}
-                        barClassName="bg-primary"
-                    />
-                )}
-                {showDisk && apps.disk && (
-                    <ResourceBlock
-                        label="Disk · アプリ別"
-                        totalLabel="ディスク容量"
-                        rows={diskRows}
-                        usage={apps.disk}
-                        stamp={measuredAge === undefined ? undefined : `計測 ${formatAge(measuredAge)}（1時間ごと）`}
-                        barClassName="bg-teal-400"
-                    />
-                )}
-            </div>
-
-            <p className="border-t border-border pt-2.5 text-[10px] text-muted-foreground sm:text-[11px]">
-                メモリはアプリのディレクトリで動いているプロセスの使用メモリ（共有分をプロセス数で割ったPSS）の合計。ディスクは各アプリのディレクトリの使用量（node_modules・ビルド成果物を含む）。
+        <div className="space-y-3">
+            <ResourceBlock
+                label="Disk · アプリ別"
+                totalLabel="ディスク容量"
+                rows={rows}
+                usage={apps.disk}
+                stamp={measuredAge === undefined ? undefined : `計測 ${formatAge(measuredAge)}（1時間ごと）`}
+                barClassName="bg-teal-400"
+            />
+            <p className={FOOTNOTE_CLASS}>
+                各アプリのディレクトリの使用量（node_modules・ビルド成果物を含む）。{apps.root} 配下をアプリ単位で集計。
             </p>
-        </DashboardCard>
+        </div>
     )
 }

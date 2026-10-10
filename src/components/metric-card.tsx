@@ -31,6 +31,12 @@ interface MetricCardProps {
     chart?: React.ReactNode
     /** 値を薄く表示する（サブPCがオフラインで、表示値が過去のものになっている場合） */
     dimmed?: boolean
+    /** 渡すと押せるカードになり、詳細を開く入口として描く（#558）。押した要素が渡る（フォーカス復帰用） */
+    onOpen?: (trigger: HTMLElement) => void
+    /** 押せるカードの開く先の説明（読み上げ用）。例: 「subpc の CPU の詳細」 */
+    openLabel?: string
+    /** 異常を枠の色で示す。詳細を閉じていても気づけるようにするための要約 */
+    alert?: "danger" | "warn"
 }
 
 export function MetricCard({
@@ -40,14 +46,28 @@ export function MetricCard({
     valueClassName,
     chart,
     dimmed,
+    onOpen,
+    openLabel,
+    alert,
 }: MetricCardProps) {
-    return (
+    const card = (
         <DashboardCard
             className={cn(
                 "h-full flex flex-col justify-center items-center text-center px-3 py-4 sm:px-4 sm:py-5",
-                dimmed && "opacity-60"
+                dimmed && "opacity-60",
+                alert === "danger" && "border-red-500/60",
+                alert === "warn" && "border-amber-400/60",
+                onOpen && "group-hover/open:border-primary/60"
             )}
         >
+            {onOpen && (
+                <span
+                    aria-hidden="true"
+                    className="absolute right-2.5 top-2 text-base leading-none text-muted-foreground"
+                >
+                    ›
+                </span>
+            )}
             <span className="text-[10px] sm:text-xs opacity-70 uppercase tracking-widest mb-1.5 sm:mb-2">
                 {label}
             </span>
@@ -61,5 +81,19 @@ export function MetricCard({
             )}
             {chart && <div className="w-full mt-2 sm:mt-3">{chart}</div>}
         </DashboardCard>
+    )
+
+    if (!onOpen) return card
+
+    return (
+        <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-label={openLabel}
+            onClick={(event) => onOpen(event.currentTarget)}
+            className="group/open block h-full w-full cursor-pointer rounded-xl text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+            {card}
+        </button>
     )
 }
