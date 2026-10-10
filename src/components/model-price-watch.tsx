@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import type { ModelPrice } from "@/lib/ai-app-usage/models"
 import type { PriceWatchView } from "@/lib/ai-app-usage/price-watch/run"
 import type { CandidateKind, CheckOutcome, PriceCandidate } from "@/lib/ai-app-usage/price-watch/types"
@@ -28,8 +27,8 @@ const KIND_LABEL: Record<CandidateKind, string> = {
 const FIELD_LABEL: Record<keyof ModelPrice, string> = {
     input: "入力",
     output: "出力",
-    cacheWrite: "キャッシュ書込",
-    cacheRead: "キャッシュ読出",
+    cacheWrite: "書き込み",
+    cacheRead: "読み出し",
 }
 
 const FIELD_ORDER: (keyof ModelPrice)[] = ["input", "output", "cacheWrite", "cacheRead"]
@@ -62,21 +61,8 @@ function describePrices(candidate: PriceCandidate): string {
         .join(" / ")
 }
 
-export function ModelPriceWatch() {
-    const [view, setView] = useState<PriceWatchView | null>(null)
-    const [failed, setFailed] = useState(false)
-
-    useEffect(() => {
-        let cancelled = false
-        fetch("/api/model-price-watch", { cache: "no-store" })
-            .then((response) => (response.ok ? (response.json() as Promise<PriceWatchView>) : Promise.reject(new Error(String(response.status)))))
-            .then((value) => !cancelled && setView(value))
-            .catch(() => !cancelled && setFailed(true))
-        return () => {
-            cancelled = true
-        }
-    }, [])
-
+/** 結果の取得は呼び出し側（モデル単価表のダイアログ）が行う。`view` が無い間は何も出さない */
+export function ModelPriceWatch({ view, failed }: { view: PriceWatchView | null; failed: boolean }) {
     if (failed) return <p className="text-[11px] text-muted-foreground">定期チェックの結果を取得できませんでした。</p>
     if (!view) return null
 
