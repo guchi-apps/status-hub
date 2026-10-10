@@ -43,6 +43,9 @@ const HISTORY_LIMIT = 52
 const RETRY_AFTER_MS = 6 * 60 * 60 * 1000
 const MAX_ATTEMPTS = 3
 
+/** 手動更新の連打を止める間隔。基準は直近の実行の完了時刻（成功・失敗とも） */
+export const MANUAL_MIN_INTERVAL_MS = 60 * 1000
+
 const FETCH_TIMEOUT_MS = 20_000
 const MAX_BODY_BYTES = 4 * 1024 * 1024
 
@@ -227,6 +230,11 @@ export interface RunOptions {
     registered?: readonly ModelInfo[]
     /** 今回の実行を数える予定時刻。省略すると直近の予定時刻 */
     slotAt?: number
+    /**
+     * 画面の「更新」ボタンからの実行。予定時刻と試行回数（`slot`）を進めない。進めると、手動の連打や失敗が
+     * 定期のやり直し（`MAX_ATTEMPTS`）を削り、手動の成功で定期がその週を実行済みと見なしてしまう
+     */
+    manual?: boolean
 }
 
 const globalForRun = globalThis as unknown as { __priceWatchRun?: Promise<WatchState> }
@@ -288,7 +296,7 @@ async function executeRun(options: RunOptions): Promise<WatchState> {
         lastSuccessAt: outcome === "unchanged" || outcome === "candidates" ? finishedAt : previous.lastSuccessAt,
         candidates,
         history: [checkRun, ...previous.history].slice(0, HISTORY_LIMIT),
-        slot: { at: slotAt, attempts },
+        slot: options.manual ? previous.slot : { at: slotAt, attempts },
     }
     // 先に保存する。通知の途中でプロセスが落ちても、実行した事実と候補は残る
     await writeWatchState(state)
@@ -361,4 +369,27 @@ export async function getPriceWatchView(now = Date.now()): Promise<PriceWatchVie
         candidates: state.candidates,
         history: state.history.slice(0, 8),
     }
+}
+
+/** 直近の実行から間もないか（手動更新の連打を実行せずに返すための判定） */
+export function isManualRunThrottled(state: WatchState, now: number): boolean {
+    if (!state.lastRun) return false
+    const elapsed = now - new Date(state.lastRun.finishedAt).getTime()
+    return elapsed >= 0 && elapsed < MANUAL_MIN_INTERVAL_MS
+}
+
+/**
+ * 画面の「更新」ボタン。公式ページを今すぐ確認し、画面へ返す形で結果を返す。
+ * 直近の実行から60秒以内なら実行せず、保存済みの結果を `throttled` 付きで返す。
+ * 同時に押された分は `runModelPriceWatch` の相乗りで1回にまとまる。
+ */
+export async function refreshModelPriceWatch(
+    options: Omit<RunOptions, "manual"> = {}
+): Promise<{ view: PriceWatchView; throttled: boolean }> {
+    const now = options.now ?? Date.now()
+    if (isManualRunThrottled(await readWatchState(), now)) {
+        return { view: await getPriceWatchView(now), throttled: true }
+    }
+    await runModelPriceWatch({ ...options, now, manual: true })
+    return { view: await getPriceWatchView(now), throttled: false }
 }
