@@ -205,6 +205,22 @@ AIDEタブは `aide.gucchii.com/status` と同じ内容を、AIDEの `GET /api/s
   **こちらで履歴を貯め直す形にはしない**（AIDE側が正）。モーダルは、タブ切り替えの transform の中では
   `fixed` が画面基準にならないため `createPortal` で body 直下に出している
 
+## dotの作業状況（AIDEタブの上部）
+
+dotが**明示的に報告した作業だけ**を、AIDEの `GET /api/work-reports`（aide#609。契約は AIDE の
+`docs/work-reports.md`）から読んで出している（#575）。**状態・版の順序・更新途絶の判定はAIDE側が正で、
+StatusHubは推測しない。** 形の写しは `src/types/aide-work-reports.ts`。
+
+- **トークンは `AIDE_WORK_REPORTS_TOKEN`（AIDE側は `AIDE_WORK_REPORTS_READ_SECRET`）で、`AIDE_STATUS_TOKEN`・`OPS_API_TOKEN` とは別。**
+  共有トークンAPIは使わない（提供側のop://を参照するマニフェスト行で配る）。未設定なら節ごと出さない
+- **更新途絶（`freshness: stale`＝最終受信から30分超）は「更新なし（状態不明）」と出し、完了・失敗へ推定しない。**
+  「最終報告（AIDEの受信時刻）」と「確認（StatusHubの取得時刻）」は別に出す。取得失敗は無報告（空一覧）と区別し、
+  直前の一覧を残すときは「最新とは限りません」と添える
+- 1行でも形が違う応答は全体を捨てる（`parseWorkListing`）。遅れて届いた古い一覧・版が小さくなる行は採らない（`mergeWorkListings`）
+- リンクは https のみ（`safeLink`）。内容はすべてテキストとして描画し、HTMLとして解釈しない
+- **導入順（マージだけでは接続確認済みにならない）**: AIDEの再接続と `work-reports:*` scope の許可、実際のdot接続からの
+  無害なテスト作業1件での確認は、利用者の承認と操作が要る（aide#609の導入順3・4）
+
 ## 監視モニターの表示名の変更
 
 監視タブのカードの鉛筆ボタンで、モニターの表示名を変えられる（#479）。**名前はこのダッシュボードの

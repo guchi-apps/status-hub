@@ -75,7 +75,7 @@ jobs:
         ^src/(proxy\.ts$|lib/(supabase/|allowed-emails\.ts$|session\.ts$)) :: 認証・セッション・許可ユーザー判定の変更 (src/proxy.ts, src/lib/supabase/**, src/lib/allowed-emails.ts, src/lib/session.ts)
         ^src/(lib/access/|app/admin/|types/node-sqlite\.d\.ts$)|^scripts/access-(recover|migrate|migration-core)\.mjs$ :: 共通アクセス設定（認可の判定・管理画面・復旧CLI・移行CLI）の変更 (src/lib/access/**, src/app/admin/**, scripts/access-recover.mjs, scripts/access-migrate.mjs, scripts/access-migration-core.mjs)
         ^src/app/api/ :: APIルートの変更 (src/app/api/**。proxyの認証対象外で、ルート側で認証する)
-        ^src/lib/(ai-usage/|claude-usage\.ts$|onepassword-usage\.ts$|uptimerobot\.ts$|uptime-kuma(-admin)?\.ts$|github-(usage|repo-visibility)\.ts$|(shared|ops-api)-token\.ts$|aide-status\.ts$|ai-app-usage/) :: 外部サービスのトークンを扱うAPIクライアントの変更 (AI利用枠・1Password・UptimeRobot・Uptime Kuma・GitHub・共有トークンAPI・AIDE・アプリ別AI利用)
+        ^src/lib/(ai-usage/|claude-usage\.ts$|onepassword-usage\.ts$|uptimerobot\.ts$|uptime-kuma(-admin)?\.ts$|github-(usage|repo-visibility)\.ts$|(shared|ops-api)-token\.ts$|aide-status\.ts$|aide-work-reports\.ts$|ai-app-usage/) :: 外部サービスのトークンを扱うAPIクライアントの変更 (AI利用枠・1Password・UptimeRobot・Uptime Kuma・GitHub・共有トークンAPI・AIDE・アプリ別AI利用)
         ^src/lib/push/ :: プッシュ通知の鍵（VAPID秘密鍵）を扱う送信処理の変更 (src/lib/push/**)
         ^scripts/sync-github-secrets\.sh$ :: シークレット同期スクリプトの変更 (scripts/sync-github-secrets.sh)
       # 上の uses: と同じタグを指定する。片方だけ上げると新しいワークフローで
