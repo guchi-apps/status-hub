@@ -1,6 +1,6 @@
 import fs from "fs"
 import path from "path"
-import { listModels, setExtraModelsProvider, type ModelFamily, type ModelInfo, type ModelPrice } from "@/lib/ai-app-usage/models"
+import { listModels, normalizeModelLabel, setExtraModelsProvider, type ModelFamily, type ModelInfo, type ModelPrice } from "@/lib/ai-app-usage/models"
 import type { PriceCandidate } from "@/lib/ai-app-usage/price-watch/types"
 import { writeFileAtomic } from "@/lib/host-stats/store"
 
@@ -46,7 +46,7 @@ function parseAdded(value: unknown): ModelInfo[] {
         return [
             {
                 id: entry.id,
-                label: entry.label,
+                label: normalizeModelLabel(entry.provider, entry.label),
                 provider: entry.provider,
                 family: entry.family as ModelFamily,
                 price: { input: price.input!, output: price.output!, cacheWrite: price.cacheWrite!, cacheRead: price.cacheRead! },
@@ -126,7 +126,7 @@ export function candidateToModel(candidate: PriceCandidate, registered: readonly
     const after = candidate.after
     return {
         id: candidate.id,
-        label: existing?.label ?? candidate.name,
+        label: existing?.label ?? normalizeModelLabel(candidate.provider, candidate.name),
         provider: candidate.provider,
         family: existing?.family ?? guessFamily(candidate.provider, candidate.name),
         // 公式で確かめた単価なので、「出典未確認」の注記は付けない

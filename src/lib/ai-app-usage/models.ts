@@ -182,6 +182,69 @@ export function findModel(model: string): ModelInfo | null {
     )
 }
 
+/**
+ * 表示名を揃える（#570）。公式の表示名やIDのまま入った行を、一覧の他の行と同じ表記にする。
+ * Anthropicは先頭の「Claude 」を外し、OpenAIの `gpt-6.1-sol` は `GPT-6.1 Sol` にする。モデルIDは変えない。
+ */
+export function normalizeModelLabel(provider: string, name: string): string {
+    const trimmed = name.trim()
+    if (provider === "Anthropic") return trimmed.replace(/^claude[\s-]+/i, "")
+    if (provider === "OpenAI") {
+        const match = /^gpt[\s-]*(\d+(?:\.\d+)*)(?:[\s-]+(.+))?$/i.exec(trimmed)
+        if (match) {
+            const suffix = (match[2] ?? "")
+                .split(/[\s-]+/)
+                .filter(Boolean)
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(" ")
+            return suffix ? `GPT-${match[1]} ${suffix}` : `GPT-${match[1]}`
+        }
+    }
+    return trimmed
+}
+
+/** 提供元の並び。一覧に無い提供元はこの後ろへ、出てきた順で並ぶ */
+const PROVIDER_ORDER = ["Anthropic", "OpenAI", "TypeSafe"]
+
+/** 格付け（上位ほど小さい）。名前から引く。無いものは各提供元の末尾 */
+const TIER_ORDER = ["fable", "astra", "opus", "sol", "sonnet", "terra", "haiku", "luna", "jev"]
+
+function tierRank(label: string): number {
+    const index = TIER_ORDER.findIndex((tier) => label.toLowerCase().includes(tier))
+    return index === -1 ? TIER_ORDER.length : index
+}
+
+/** 表示名に含まれる版（`5.5`・`6.1`）。無ければ0 */
+function versionOf(label: string): number[] {
+    return (/\d+(?:\.\d+)*/.exec(label)?.[0] ?? "0").split(".").map(Number)
+}
+
+function compareVersionsDesc(a: number[], b: number[]): number {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const diff = (b[i] ?? 0) - (a[i] ?? 0)
+        if (diff !== 0) return diff
+    }
+    return 0
+}
+
+/**
+ * 単価表の表示順（#570）。提供元ごとにまとめ、各提供元の中は格付けの高い順、同じ格付けなら新しい版が上。
+ * 格付けが不明なモデルは提供元の末尾へ、出力単価の高い順で並べる。**概算金額の計算には影響しない**（表示専用）。
+ */
+export function sortModelsForDisplay<T extends ModelInfo>(models: readonly T[]): T[] {
+    const providerRank = (provider: string) => {
+        const index = PROVIDER_ORDER.indexOf(provider)
+        return index === -1 ? PROVIDER_ORDER.length : index
+    }
+    return [...models].sort(
+        (a, b) =>
+            providerRank(a.provider) - providerRank(b.provider) ||
+            tierRank(a.label) - tierRank(b.label) ||
+            compareVersionsDesc(versionOf(a.label), versionOf(b.label)) ||
+            b.price.output - a.price.output
+    )
+}
+
 /** 集計のキーに使うモデルID。一覧にあれば一覧のID、無ければ連携先が返した値のまま */
 export function canonicalModelId(model: string): string {
     return findModel(model)?.id ?? model
