@@ -1,4 +1,6 @@
 import { estimateCostUsd } from "@/lib/ai-app-usage/models"
+// 画面操作で反映したモデルも金額の計算に使うため、取得元を差し込む（サーバー専用。副作用import）
+import "@/lib/ai-app-usage/price-watch/overrides"
 import { parseAiAppUsageResponse } from "@/lib/ai-app-usage/parse"
 import type { AiAppUsageSource } from "@/lib/ai-app-usage/sources"
 import { fetchWithTimeout } from "@/lib/upstream"
