@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { canonicalModelId, estimateCostUsd, findModel, listModels, modelLabel } from "@/lib/ai-app-usage/models"
+import { canonicalModelId, estimateCostUsd, findModel, listModels, modelLabel, normalizeModelLabel, sortModelsForDisplay } from "@/lib/ai-app-usage/models"
 import { TYPESAFE_INPUT_USD_PER_MILLION_TOKENS } from "@/lib/ai-usage/typesafe"
 
 const NONE = { cacheReadTokens: 0, cacheWriteTokens: 0 }
@@ -139,5 +139,33 @@ describe("listModels", () => {
         assert.equal(findModel("gpt-5.6-sol")?.note, undefined)
         assert.equal(findModel("gpt-6-sol")?.note, "出典未確認")
         assert.equal(findModel("claude-opus-5")?.note, undefined)
+    })
+})
+
+describe("表示名の統一と並び順（#570）", () => {
+    it("Anthropicの先頭の「Claude 」を外し、OpenAIのIDは見出しの形にする", () => {
+        assert.equal(normalizeModelLabel("Anthropic", "Claude Sonnet 5.5"), "Sonnet 5.5")
+        assert.equal(normalizeModelLabel("Anthropic", "Opus 5"), "Opus 5")
+        assert.equal(normalizeModelLabel("OpenAI", "gpt-6.1-sol"), "GPT-6.1 Sol")
+        assert.equal(normalizeModelLabel("OpenAI", "gpt-6-astra"), "GPT-6 Astra")
+        assert.equal(normalizeModelLabel("OpenAI", "GPT-5.6 Terra"), "GPT-5.6 Terra")
+        assert.equal(normalizeModelLabel("TypeSafe", "Jev"), "Jev")
+    })
+
+    it("提供元をまとめ、格付けの高い順・新しい版が上に並ぶ", () => {
+        const price = { input: 1, output: 1, cacheWrite: 1, cacheRead: 1 }
+        const row = (provider: string, label: string) => ({ id: label, label, provider, family: "gpt" as const, price })
+        const sorted = sortModelsForDisplay([
+            row("OpenAI", "GPT-5.6 Luna"),
+            row("TypeSafe", "Jev"),
+            row("Anthropic", "Haiku 4.5"),
+            row("OpenAI", "GPT-6 Sol"),
+            row("Anthropic", "Opus 5"),
+            row("OpenAI", "GPT-6.1 Sol"),
+            row("Anthropic", "Opus 5.5"),
+            row("OpenAI", "GPT-6 Astra"),
+            row("Anthropic", "Fable 5.1"),
+        ]).map((info) => info.label)
+        assert.deepEqual(sorted, ["Fable 5.1", "Opus 5.5", "Opus 5", "Haiku 4.5", "GPT-6 Astra", "GPT-6.1 Sol", "GPT-6 Sol", "GPT-5.6 Luna", "Jev"])
     })
 })

@@ -7,7 +7,7 @@ import { MENU_ITEM_CLASS, useHeaderMenu } from "@/components/header-menu"
 import { ModelPriceWatch } from "@/components/model-price-watch"
 import { Button } from "@/components/ui/button"
 import { CSRF_HEADERS } from "@/lib/csrf-headers"
-import { listModels, type ModelFamily, type ModelInfo } from "@/lib/ai-app-usage/models"
+import { listModels, sortModelsForDisplay, type ModelFamily, type ModelInfo } from "@/lib/ai-app-usage/models"
 import type { PriceModelRow, PriceWatchView } from "@/lib/ai-app-usage/price-watch/run"
 import type { PriceCandidate } from "@/lib/ai-app-usage/price-watch/types"
 import { cn } from "@/lib/utils"
@@ -78,7 +78,7 @@ function ModelPriceDialog({ onClose }: { onClose: () => void }) {
     // 追加・非表示を反映した一覧はサーバーが返す。取得できていない間は組み込みの一覧で表だけ出す
     const allModels: PriceModelRow[] = view?.models ?? listModels().map((info) => ({ ...info, hidden: false, added: false }))
     const hiddenCount = allModels.filter((info) => info.hidden).length
-    const models = allModels.filter((info) => showHidden || !info.hidden)
+    const models = sortModelsForDisplay(allModels.filter((info) => showHidden || !info.hidden))
     const providers = [...new Set(models.map((info) => info.provider))]
     const [failed, setFailed] = useState(false)
     const [refreshing, setRefreshing] = useState(false)
@@ -250,11 +250,6 @@ function ModelPriceDialog({ onClose }: { onClose: () => void }) {
                                                 <span className="flex items-center gap-1.5">
                                                     <span className={cn("size-2 shrink-0 rounded-[2px]", FAMILY_DOT[info.family])} aria-hidden />
                                                     <b className="whitespace-nowrap text-[12px] font-semibold sm:text-[13px]">{info.label}</b>
-                                                    {info.added && (
-                                                        <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-500/40 px-1.5 text-[10px] text-emerald-400">
-                                                            反映済み
-                                                        </span>
-                                                    )}
                                                     {info.note && (
                                                         <span className="shrink-0 whitespace-nowrap rounded-full border border-amber-500/40 px-1.5 text-[10px] text-amber-400">
                                                             {info.note}
