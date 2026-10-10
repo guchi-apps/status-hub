@@ -3,6 +3,7 @@
 import type { ModelPrice } from "@/lib/ai-app-usage/models"
 import type { PriceWatchView } from "@/lib/ai-app-usage/price-watch/run"
 import type { CandidateKind, CheckOutcome, PriceCandidate } from "@/lib/ai-app-usage/price-watch/types"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 /**
@@ -61,8 +62,31 @@ function describePrices(candidate: PriceCandidate): string {
         .join(" / ")
 }
 
-/** 結果の取得は呼び出し側（モデル単価表のダイアログ）が行う。`view` が無い間は何も出さない */
-export function ModelPriceWatch({ view, failed }: { view: PriceWatchView | null; failed: boolean }) {
+/** 候補を単価表へ反映できるか。IDが未確定・通常価格が無い・掲載終了の候補は、取り違えを避けて反映させない */
+function addBlockedReason(candidate: PriceCandidate): string | null {
+    if (candidate.kind === "delisted") return null
+    if (!candidate.id) return "IDが未確定のため反映できません"
+    if (!candidate.after) return "通常価格が無いため反映できません"
+    return null
+}
+
+/**
+ * 結果の取得と操作の送信は呼び出し側（モデル単価表のダイアログ）が行う。`view` が無い間は何も出さない。
+ * `busy` は操作を送信中のあいだ、ボタンを押せなくする。
+ */
+export function ModelPriceWatch({
+    view,
+    failed,
+    busy,
+    onAdd,
+    onHide,
+}: {
+    view: PriceWatchView | null
+    failed: boolean
+    busy: boolean
+    onAdd: (candidate: PriceCandidate) => void
+    onHide: (candidate: PriceCandidate) => void
+}) {
     if (failed) return <p className="text-[11px] text-muted-foreground">定期チェックの結果を取得できませんでした。</p>
     if (!view) return null
 
@@ -139,6 +163,15 @@ export function ModelPriceWatch({ view, failed }: { view: PriceWatchView | null;
                                 </a>{" "}
                                 ・確認 {formatDateTime(candidate.checkedAt)}
                             </p>
+                            <p className="flex flex-wrap items-center gap-2 pt-1">
+                                <Button type="button" size="sm" disabled={busy || addBlockedReason(candidate) !== null} onClick={() => onAdd(candidate)}>
+                                    {candidate.kind === "add" ? "単価表に追加" : "この単価を反映"}
+                                </Button>
+                                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onHide(candidate)}>
+                                    非表示
+                                </Button>
+                                {addBlockedReason(candidate) && <span className="text-[11px] text-muted-foreground">{addBlockedReason(candidate)}</span>}
+                            </p>
                         </li>
                     ))}
                 </ul>
@@ -151,8 +184,8 @@ export function ModelPriceWatch({ view, failed }: { view: PriceWatchView | null;
             )}
 
             <p className="text-[11px] text-muted-foreground">
-                単価表は自動では書き換えません。候補を確かめて反映すると、使用量の概算金額は過去の期間も新しい単価で計算し直されます
-                （概算であり請求額ではありません）。手順は docs/model-price-watch.md。TypeSafeと、ChatGPT・Codex内だけのモデルは公開API単価が無いため対象外です。
+                単価表は自動では書き換わりません。候補を確かめて「追加・反映」すると、使用量の概算金額は過去の期間も新しい単価で
+                計算し直されます（概算であり請求額ではありません）。「非表示」にした候補は、価格が変わると再び出ます。TypeSafeと、ChatGPT・Codex内だけのモデルは公開API単価が無いため対象外です。
             </p>
         </div>
     )

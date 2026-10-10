@@ -9,7 +9,7 @@ const AT = "2026-10-05T05:00:00.000Z"
 const REGISTERED: ModelInfo[] = [
     { id: "claude-sonnet-5", label: "Sonnet 5", provider: "Anthropic", family: "sonnet", price: { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 } },
     { id: "gpt-6-sol", label: "GPT-6 Sol", provider: "OpenAI", family: "gpt", note: "出典未確認", price: { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 } },
-    { id: "gpt-5.6-sol", label: "GPT-5.6 Sol", provider: "OpenAI", family: "gpt", note: "換算の目安", price: { input: 4, output: 20, cacheWrite: 4, cacheRead: 0.4 } },
+    { id: "gpt-5.6-sol", label: "GPT-5.6 Sol", provider: "OpenAI", family: "gpt", price: { input: 4, output: 20, cacheWrite: 4, cacheRead: 0.4 } },
     { id: "gpt-old", label: "GPT Old", provider: "OpenAI", family: "gpt", price: { input: 1, output: 2, cacheWrite: 1, cacheRead: 0.1 } },
     { id: "jev", label: "Jev", provider: "TypeSafe", family: "jev", price: { input: 0.042, output: 0, cacheWrite: 0, cacheRead: 0 } },
 ]

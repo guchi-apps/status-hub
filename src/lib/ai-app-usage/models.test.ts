@@ -135,8 +135,8 @@ describe("listModels", () => {
         assert.equal(listModels().length, before)
     })
 
-    it("GPT-5.6系は換算の目安、GPT-6系は出典未確認の注記を持つ", () => {
-        assert.equal(findModel("gpt-5.6-sol")?.note, "換算の目安")
+    it("GPT-6系は出典未確認の注記を持ち、GPT-5.6系・Claude系は注記を持たない", () => {
+        assert.equal(findModel("gpt-5.6-sol")?.note, undefined)
         assert.equal(findModel("gpt-6-sol")?.note, "出典未確認")
         assert.equal(findModel("claude-opus-5")?.note, undefined)
     })

@@ -24,7 +24,7 @@ export interface ModelInfo {
     provider: string
     family: ModelFamily
     price: ModelPrice
-    /** 単価表に添える注記（出典が未確認・換算の目安など）。単価と一緒に更新するため、この一覧に持たせる */
+    /** 単価表に添える注記（出典が未確認など）。単価と一緒に更新するため、この一覧に持たせる */
     note?: string
 }
 
@@ -40,7 +40,7 @@ export interface ModelInfo {
  * 行ごとに自分のモデルの単価で換算するため、消すとその期間の金額が「不明」に化ける。
  *
  * GPT-5.6系（aide-bot が Codex CLI 経由で使う）は、ChatGPTの定額枠で動くため実際の請求は発生しない。
- * ここの単価は公開API価格での「換算の目安」。出典は第三者サイトの2026-09-25時点の値（公式ページは
+ * ここの単価は公開API価格での換算値（画面に注記は出さない。#566）。出典は第三者サイトの2026-09-25時点の値（公式ページは
  * 取得できなかった。Solは2026-11-21までの期間限定価格の可能性）で、**キャッシュ読み出し（入力の1/10）と
  * 書き込み（入力と同額）は仮定**。公式の値が分かったら直す。
  *
@@ -99,7 +99,6 @@ const MODELS: ModelInfo[] = [
         label: "GPT-5.6 Sol",
         provider: "OpenAI",
         family: "gpt",
-        note: "換算の目安",
         price: { input: 4, output: 20, cacheWrite: 4, cacheRead: 0.4 },
     },
     {
@@ -107,7 +106,6 @@ const MODELS: ModelInfo[] = [
         label: "GPT-5.6 Terra",
         provider: "OpenAI",
         family: "gpt",
-        note: "換算の目安",
         price: { input: 2, output: 12, cacheWrite: 2, cacheRead: 0.2 },
     },
     {
@@ -115,7 +113,6 @@ const MODELS: ModelInfo[] = [
         label: "GPT-5.6 Luna",
         provider: "OpenAI",
         family: "gpt",
-        note: "換算の目安",
         price: { input: 0.2, output: 1.2, cacheWrite: 0.2, cacheRead: 0.02 },
     },
     {
@@ -136,9 +133,31 @@ const MODELS: ModelInfo[] = [
     },
 ]
 
+type ExtraModelsProvider = () => readonly ModelInfo[]
+
+const globalForModels = globalThis as unknown as { __extraModelsProvider?: ExtraModelsProvider }
+
+/**
+ * 画面操作で追加・反映したモデル（#566）の取得元を登録する。**サーバー側だけが呼ぶ**（`price-watch/overrides.ts`）。
+ * このファイルはクライアントからも読まれるため、ファイルの読み込みはここに持たず、同期の関数として差し込む。
+ * 未登録（クライアント）のときは組み込みの一覧だけになる。
+ */
+export function setExtraModelsProvider(provider: ExtraModelsProvider | undefined): void {
+    globalForModels.__extraModelsProvider = provider
+}
+
+/** 組み込みの一覧に、追加分を重ねる。同じIDは追加分（価格変更の反映）で置き換え、新しいIDは末尾へ足す */
+function allModels(): readonly ModelInfo[] {
+    const extra = globalForModels.__extraModelsProvider?.() ?? []
+    if (extra.length === 0) return MODELS
+
+    const byId = new Map(extra.map((info) => [info.id, info]))
+    return [...MODELS.map((info) => byId.get(info.id) ?? info), ...extra.filter((info) => !MODELS.some((base) => base.id === info.id))]
+}
+
 /** 単価表の表示用に、一覧を登録順のまま返す（呼び出し側が並びを変えても元の一覧には響かないコピー） */
 export function listModels(): readonly ModelInfo[] {
-    return [...MODELS]
+    return [...allModels()]
 }
 
 /**
@@ -152,9 +171,13 @@ export function listModels(): readonly ModelInfo[] {
  */
 export function findModel(model: string): ModelInfo | null {
     const normalized = model.trim().toLowerCase()
+    const models = allModels()
     return (
-        MODELS.find((info) => normalized === info.id) ??
-        MODELS.find((info) => normalized.startsWith(`${info.id}-`)) ??
+        models.find((info) => normalized === info.id) ??
+        // 前方一致は最も長いIDを選ぶ。`claude-sonnet-5-5-20260101` が `claude-sonnet-5` に先に当たらないように
+        models
+            .filter((info) => normalized.startsWith(`${info.id}-`))
+            .reduce<ModelInfo | null>((best, info) => (best === null || info.id.length > best.id.length ? info : best), null) ??
         null
     )
 }

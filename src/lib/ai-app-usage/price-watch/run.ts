@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { listModels, type ModelInfo } from "@/lib/ai-app-usage/models"
 import { diffProvider } from "@/lib/ai-app-usage/price-watch/diff"
+import { readOverridesSync } from "@/lib/ai-app-usage/price-watch/overrides"
 import {
     describeSchedule,
     latestSlot,
@@ -302,7 +303,8 @@ async function executeRun(options: RunOptions): Promise<WatchState> {
     await writeWatchState(state)
 
     // 通知するのは確かめてほしい差分だけ。掲載終了は情報としてだけ出す
-    const notifiable = candidates.filter((entry) => entry.kind !== "delisted")
+    const hiddenKeys = readOverridesSync().hiddenCandidates
+    const notifiable = candidates.filter((entry) => entry.kind !== "delisted" && !hiddenKeys.includes(entry.key))
     const newOnes = notifiable.filter((entry) => !previous.notifiedKeys.includes(entry.key))
     const failed = providers.filter((entry) => entry.status === "failed")
     const failureKey = failed.length > 0 ? failed.map((entry) => `${entry.provider}:${entry.reason}`).sort().join("|") : null
@@ -353,21 +355,37 @@ export interface PriceWatchView {
     nextRunAt: string
     lastRun: CheckRun | null
     lastSuccessAt: string | null
+    /** 非表示にしたものを除いた更新候補 */
     candidates: PriceCandidate[]
     history: CheckRun[]
+    /** 単価表の行（反映したモデルを含む。非表示の印付き。クライアントは `models.ts` の組み込み一覧ではなくこれを使う） */
+    models: PriceModelRow[]
+}
+
+/** 単価表の1行。`hidden` は表示だけの印で、金額の計算には使われ続ける */
+export interface PriceModelRow extends ModelInfo {
+    hidden: boolean
+    /** 画面操作で反映した（または価格を置き換えた）行 */
+    added: boolean
 }
 
 export async function getPriceWatchView(now = Date.now()): Promise<PriceWatchView> {
     const state = await readWatchState()
     const schedule = readSchedule()
+    const overrides = readOverridesSync()
     return {
         enabled: isPriceWatchEnabled(),
         schedule: describeSchedule(schedule),
         nextRunAt: new Date(nextSlot(now, schedule)).toISOString(),
         lastRun: state.lastRun,
         lastSuccessAt: state.lastSuccessAt,
-        candidates: state.candidates,
+        candidates: state.candidates.filter((entry) => !overrides.hiddenCandidates.includes(entry.key)),
         history: state.history.slice(0, 8),
+        models: listModels().map((info) => ({
+            ...info,
+            hidden: overrides.hiddenModels.includes(info.id),
+            added: overrides.added.some((entry) => entry.id === info.id),
+        })),
     }
 }
 
