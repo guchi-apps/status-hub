@@ -40,7 +40,7 @@ describe("単価表の画面操作", () => {
         const row = view.models.find((info) => info.id === "claude-sonnet-5-5")
         assert.equal(row?.added, true)
         assert.equal(row?.note, undefined)
-        assert.equal(findModel("claude-sonnet-5-5-20260101")?.label, "Claude Sonnet 5.5")
+        assert.equal(findModel("claude-sonnet-5-5-20260101")?.label, "Sonnet 5.5")
         const cost = estimateCostUsd("claude-sonnet-5-5", { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0 })
         assert.equal(cost, 18)
     })

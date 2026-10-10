@@ -14,6 +14,13 @@ export interface ChangelogEntry {
 // 新しいバージョンを配列の先頭に追記していく（changelog-ja skill の運用ルールに従う）
 export const changelog: ChangelogEntry[] = [
     {
+        version: "0.53.1",
+        date: "2026-10-10",
+        changes: [
+            "モデル単価表の見た目を整えました。モデル名の表記を統一し、提供元ごとに上位のモデルから順に並ぶようになりました。",
+        ],
+    },
+    {
         version: "0.53.0",
         date: "2026-10-10",
         changes: [
