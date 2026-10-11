@@ -334,8 +334,8 @@ jobs:
             update_env UPTIMEKUMA_PASSWORD "$UPTIMEKUMA_PASSWORD"
             update_env UPTIMEKUMA_ADMIN_TOKEN "$UPTIMEKUMA_ADMIN_TOKEN"
             update_env HOST_STATS_TOKEN "$HOST_STATS_TOKEN"
-            # 画面に並べる順番（先頭がVPS、以降は識別子順）。秘密ではないため直接指定する
-            update_env HOST_STATS_ORDER "vps"
+            # 画面に並べる順番（VPS・サブPC・Mac Mini・Pi Zero W の順、それ以外は識別子順）。秘密ではないため直接指定する
+            update_env HOST_STATS_ORDER "vps,subpc,macmini,pi0w"
             update_env SIGNALY_LOGIN_WEBHOOK_URL "$SIGNALY_LOGIN_WEBHOOK_URL"
             # secret未登録でもデプロイを落とさない（未設定なら通知しないだけ。#75）。
             # このスクリプトは set -u の下で動くため、素の $VAR だと未登録の間は必ず失敗する

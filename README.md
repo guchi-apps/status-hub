@@ -248,7 +248,7 @@ tmuxタブの各行の「閉じる」から、そのセッションを終了で�
 `HOST_STATS_TOKEN` を設定するだけでよい（未設定の場合、受信は常に401になる）。
 本番では1Passwordの `apps/ops-dashboard` アイテムに `host-stats-token` フィールドを追加しておく（未作成のままだとデプロイのシークレット読み込みが失敗する）。
 
-並び順は `HOST_STATS_ORDER`（識別子をカンマ区切り、デプロイ時に `vps` を指定している）、オフライン判定のしきい値と履歴の長さは `HOST_STATS_OFFLINE_AFTER_SECONDS` / `HOST_STATS_HISTORY_HOURS` で変えられる。
+並び順は `HOST_STATS_ORDER`（識別子をカンマ区切り。既定・デプロイ時の指定とも `vps,subpc,macmini,pi0w`。概要とホスト一覧で共通）、オフライン判定のしきい値と履歴の長さは `HOST_STATS_OFFLINE_AFTER_SECONDS` / `HOST_STATS_HISTORY_HOURS` で変えられる。
 
 定期ジョブの通知を出すには `SIGNALY_ALERT_WEBHOOK_URL` を設定する（未設定なら画面表示だけが動き、通知は出ない）。1Passwordの `apps/ops-dashboard` アイテムの `alert-webhook-url` フィールドが正。判定のしきい値は `HOST_STATS_TIMER_GRACE_SECONDS`（既定3600）と `HOST_STATS_TIMER_FAILURE_THRESHOLD`（既定1）で変えられる。
 
