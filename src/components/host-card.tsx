@@ -7,7 +7,7 @@ import { formatAge, formatBytes, formatUptime } from "@/lib/host-stats/format"
 import { pickSeries } from "@/lib/host-stats/history"
 import { describeTimer, evaluateTimers, type TimerState, type TimerStatus } from "@/lib/host-stats/timers"
 import { cn } from "@/lib/utils"
-import type { HostStatsHostView } from "@/types/host-stats"
+import type { HostSensorState, HostSensorsView, HostStatsHostView } from "@/types/host-stats"
 
 function formatRate(bytesPerSecond: number): string {
     return `${formatBytes(bytesPerSecond)}/s`
@@ -124,6 +124,48 @@ function TimerList({ statuses }: { statuses: TimerStatus[] }) {
     )
 }
 
+/** センサーの状態と色の対応。unknown は「止まっている」ではないので警告どまりにする */
+export const SENSOR_TONES: Record<HostSensorState, StatusTone> = {
+    ok: "ok",
+    retrying: "warn",
+    stale: "danger",
+    unknown: "warn",
+}
+
+/**
+ * センサーの取得状況（#581）。ホストが動いていても、センサーだけ取れていないことがあるため別に出す。
+ * 定期ジョブと同じく、異常なものは狭い画面でも隠さない。
+ */
+function SensorList({ sensors }: { sensors: HostSensorsView | undefined }) {
+    if (!sensors) return null
+
+    const hasAbnormal = !sensors.available || sensors.items.some((sensor) => sensor.abnormal)
+
+    return (
+        <div className={cn("mt-2 gap-1", hasAbnormal ? "flex flex-col" : "hidden sm:flex sm:flex-col")}>
+            <div className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground">センサー</div>
+            {!sensors.available && (
+                <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
+                    <StatusDot tone="warn" />
+                    <span className="truncate text-muted-foreground">取得状況を読めません（取得側が未記録）</span>
+                </div>
+            )}
+            {sensors.items.map((sensor) => (
+                <div
+                    key={sensor.name}
+                    className={cn("flex min-w-0 items-center gap-1.5 text-[10px]", !sensor.abnormal && "hidden sm:flex")}
+                >
+                    <StatusDot tone={SENSOR_TONES[sensor.state]} />
+                    <span className="shrink-0">{sensor.name}</span>
+                    <span className="truncate text-muted-foreground" title={sensor.label}>
+                        {sensor.label}
+                    </span>
+                </div>
+            ))}
+        </div>
+    )
+}
+
 /**
  * 概要タブに出す、1ホスト＝1枚のカード。
  *
@@ -209,7 +251,7 @@ export function HostCard({
                 </span>
                 {!online && (
                     <span className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 font-mono text-[9px] font-bold text-red-400">
-                        OFFLINE
+                        応答なし
                     </span>
                 )}
                 <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
@@ -282,6 +324,7 @@ export function HostCard({
             </div>
 
             <TimerList statuses={timerStatuses} />
+            <SensorList sensors={host.sensors} />
         </div>
     )
 }

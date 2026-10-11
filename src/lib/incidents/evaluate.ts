@@ -106,9 +106,10 @@ const ROBOT_PREFIX = "monitor:robot:"
  * | ホスト停止疑い | `online === false`（OFFLINE表示・停止通知と同じ値） |
  * | サービス停止 | オンラインのホストの `services[].active === false`（ホストカードの停止扱い） |
  * | 定期ジョブ異常 | `summarizeTimers` の異常（オフラインのホストは除外済み。取得不可は件数に入れない） |
+ * | センサーの取得停止 | オンラインのホストの `sensors.items[].abnormal`（`evaluateSensors`。#581） |
  * | サイト監視のDOWN | Kuma `down`・UptimeRobot `status >= 8`（監視タブのdangerと同じ） |
  *
- * ホストが停止疑いの間は、配下のサービス・ジョブの古い状態を足さない（1件にまとめる）。
+ * ホストが停止疑いの間は、配下のサービス・ジョブ・センサーの古い状態を足さない（1件にまとめる）。
  * 監視の取得に失敗した系統は「DOWN 0件」とせず、前回のその系統のエラーを持ち越して
  * 「取得不可」に載せる。定期ジョブの取得不可も同じ欄に載せる。
  */
@@ -137,6 +138,19 @@ export function evaluateIncidents(input: {
                     kind: "service",
                     title: `${host.label}: ${service.name} が停止`,
                     detail: service.state,
+                })
+            }
+            // センサーの取得停止（#581）。ホストが応答している間だけ数える（応答なしの間はホスト1件にまとめる）
+            if (host.sensors && !host.sensors.available) {
+                unavailable.push(`${host.label}: センサーの取得状況を読めません`)
+            }
+            for (const sensor of host.sensors?.items ?? []) {
+                if (!sensor.abnormal) continue
+                add({
+                    key: `sensor:${host.id}:${sensor.name}`,
+                    kind: "sensor",
+                    title: `${host.label}: ${sensor.name} の取得が止まっています`,
+                    detail: sensor.label,
                 })
             }
             continue

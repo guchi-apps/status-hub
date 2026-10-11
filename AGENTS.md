@@ -436,6 +436,17 @@ ChatGPTの5時間枠は対象外（Issueの指定）。
 - 送信先は `isHostAlertRecipient`（いまアクセス許可・端末オン・利用者記録あり）だけ。`sendPushToAll` を使わない
 - 監視の取得失敗を「DOWN 0件」にしない（前回を持ち越し、取得不可へ出す）。通知の文面で原因を断定しない
 
+## Pi Zero W のセンサー取得状況（#581）
+
+詳細は [docs/pi0w-host-stats.md](./docs/pi0w-host-stats.md)。守ること:
+
+- **Pi 専用の受け口を作らない。** 既存の `agent.sh` と `POST /api/host-stats` に `sensors` を足しただけで、状態ファイルは
+  Pi の取得スクリプト（pi0w_260719 の `switchbot_to_myroom.py`）が書く。形は「名前<TAB>最終試行<TAB>最終成功<TAB>結果」で、
+  空欄は `0`・`-` で埋める（bash の `read` はタブの連続を1つに潰す）。**形を変えるときは両リポジトリを合わせる**
+- **判定は `toHostView` の `evaluateSensors` で1回だけ。** 画面と未解消エラー件数で別々に決めない。ホストが応答していない間は
+  センサーを「不明」にし、件数もホスト1件にまとめる。`available: false`（状態ファイルを読めない）を0件＝正常にしない
+- センサーの取得停止は件数（バッジ）には入るがPushしない（Pushはホストの停止・復旧・再起動だけ。#495の方針）
+
 ## モデル単価表の定期チェック（#497）
 
 詳細は [docs/model-price-watch.md](./docs/model-price-watch.md)。守ること:

@@ -1,6 +1,7 @@
 "use client"
 
 import { AppDiskBreakdown, AppMemoryBreakdown } from "@/components/app-resources"
+import { SENSOR_TONES } from "@/components/host-card"
 import { getTemperatureColor, getUsageColor, NEUTRAL_METRIC_COLORS } from "@/components/metric-card"
 import { Sparkline } from "@/components/sparkline"
 import { StatusBadge, StatusDot, type StatusTone } from "@/components/status-badge"
@@ -133,7 +134,7 @@ function StaleNotice({ host }: { host: HostStatsHostView }) {
             className="rounded-lg border border-dashed border-red-500/50 bg-red-500/10 px-3 py-2 text-xs text-red-200"
             role="status"
         >
-            オフラインの可能性があります。最終受信は{formatAge(host.ageSeconds)}で、表示しているのはその時点の値です。
+            応答がありません。最終受信は{formatAge(host.ageSeconds)}で、表示しているのはその時点の値です。
         </p>
     )
 }
@@ -165,7 +166,7 @@ export interface SystemsSummary {
     timers: number
     abnormalTimers: number
     tmux: number
-    /** danger の件数（停止したサービス＋異常な定期ジョブ）。見出しとカードの要約に使う */
+    /** danger の件数（停止したサービス＋異常な定期ジョブ＋取得が止まったセンサー）。見出しとカードの要約に使う */
     problems: number
     /** 再起動待ち・更新あり・取得できなかったジョブ。異常ではないが気に留めたいもの */
     notices: number
@@ -178,6 +179,8 @@ export function summarizeSystems(host: HostStatsHostView): SystemsSummary {
     const stoppedServices = (latest.services ?? []).filter((service) => !service.active).length
     const abnormalTimers = timerStatuses.filter((status) => status.abnormal).length
     const unknownTimers = timerStatuses.filter((status) => status.state === "unknown").length
+    const stoppedSensors = (host.sensors?.items ?? []).filter((sensor) => sensor.abnormal).length
+    const sensorsUnreadable = host.sensors && !host.sensors.available ? 1 : 0
     const maintenance = latest.maintenance
 
     return {
@@ -187,9 +190,9 @@ export function summarizeSystems(host: HostStatsHostView): SystemsSummary {
         timers: timerStatuses.length,
         abnormalTimers,
         tmux: latest.tmuxSessions?.length ?? 0,
-        problems: stoppedServices + abnormalTimers,
+        problems: stoppedServices + abnormalTimers + stoppedSensors,
         notices:
-            unknownTimers + (maintenance?.rebootRequired ? 1 : 0) + ((maintenance?.updatesAvailable ?? 0) > 0 ? 1 : 0),
+            unknownTimers + sensorsUnreadable + (maintenance?.rebootRequired ? 1 : 0) + ((maintenance?.updatesAvailable ?? 0) > 0 ? 1 : 0),
     }
 }
 
@@ -241,6 +244,32 @@ function SystemsPanel({ host }: { host: HostStatsHostView }) {
                     </ul>
                 )}
             </Section>
+
+            {host.sensors && (
+                <Section title="センサー">
+                    {!host.sensors.available && (
+                        <p className="mb-1.5 text-xs text-muted-foreground">
+                            取得状況を読めません。取得スクリプトがまだ状態ファイルを書いていないか、エージェントから読めません。
+                        </p>
+                    )}
+                    {host.sensors.items.length > 0 && (
+                        <ul className="space-y-1.5">
+                            {host.sensors.items.map((sensor) => (
+                                <li key={sensor.name} className="flex items-start gap-2 text-xs">
+                                    <StatusDot tone={SENSOR_TONES[sensor.state]} className="mt-1.5" />
+                                    <span className="shrink-0">{sensor.name}</span>
+                                    <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
+                                        {sensor.label}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    <p className="mt-1.5 text-[10px] text-muted-foreground">
+                        最後の成功から{Math.round(host.sensors.staleAfterSeconds / 60)}分を超えたら取得停止として扱います。
+                    </p>
+                </Section>
+            )}
 
             <Section title="tmux">
                 {tmuxSessions.length === 0 ? (

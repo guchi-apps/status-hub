@@ -7,6 +7,7 @@ import type {
     HostStatsSnapshot,
     HostStatsView,
 } from "@/types/host-stats"
+import { evaluateSensors, getSensorStaleAfterSeconds } from "@/lib/host-stats/sensors"
 
 /**
  * 各ホストから受け取ったメトリクスの保管。
@@ -243,12 +244,18 @@ function toHostView(
     now: number,
     offlineAfterSeconds: number
 ): HostStatsHostView {
+    const judged = judgeHostOnline(latest.receivedAt, now, offlineAfterSeconds)
     return {
         id,
         label: latest.label || latest.hostname,
         latest,
-        ...judgeHostOnline(latest.receivedAt, now, offlineAfterSeconds),
+        ...judged,
         history,
+        sensors: evaluateSensors(latest.sensors, {
+            now,
+            hostOnline: judged.online,
+            staleAfterSeconds: getSensorStaleAfterSeconds(),
+        }),
     }
 }
 
