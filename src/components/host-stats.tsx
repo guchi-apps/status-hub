@@ -42,10 +42,10 @@ function OfflineBanner({
             className="rounded-lg border border-dashed border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-100"
             role="status"
         >
-            <p className="font-semibold">オフラインの可能性があります</p>
+            <p className="font-semibold">応答がありません</p>
             <p className="mt-1 text-red-200/80">
                 最終受信が{formatAge(ageSeconds)}で、しきい値（{Math.round(offlineAfterSeconds / 60)}分）を超えています。
-                表示しているのはその時点の値です。
+                表示しているのはその時点の値です。電源・回線・エージェントのどれが原因かは区別できません。
             </p>
         </div>
     )
@@ -120,7 +120,7 @@ function HostSection({
                     <>
                         {!online && (
                             <span className="text-xs font-mono font-semibold px-2 py-1 rounded-md bg-red-500/20 text-red-300 border border-red-500/30">
-                                OFFLINE
+                                応答なし
                             </span>
                         )}
                         {problems > 0 && (

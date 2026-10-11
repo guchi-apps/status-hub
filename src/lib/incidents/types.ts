@@ -4,7 +4,7 @@
  */
 
 /** 件数に数えるエラーの種類。各種類と既存判定の対応は docs/host-incident-alerts.md */
-export type IncidentKind = "host-down" | "service" | "timer" | "monitor"
+export type IncidentKind = "host-down" | "service" | "timer" | "sensor" | "monitor"
 
 export interface Incident {
     /** 同一対象・同一原因を1件にまとめるキー（例: `host:sub-pc`、`monitor:kuma:12`） */
