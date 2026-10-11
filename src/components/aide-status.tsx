@@ -2,7 +2,6 @@
 
 import { CSRF_HEADERS } from "@/lib/csrf-headers"
 import { Fragment, useCallback, useState } from "react"
-import { AideWorkReports } from "@/components/aide-work-reports"
 import { useDashboardData } from "@/components/dashboard-data"
 import { JobHistoryModal } from "@/components/job-history-modal"
 import { Panel } from "@/components/panel"
@@ -736,7 +735,6 @@ export function AideStatus() {
     const { aideStatus: snapshot, now } = useDashboardData()
     return (
         <div className="space-y-3">
-            <AideWorkReports />
             <AideStatusView snapshot={snapshot} now={now} />
         </div>
     )

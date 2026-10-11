@@ -5,7 +5,6 @@ import { MIN_FORCE_REFRESH_MS } from "@/lib/usage-cache"
 import type { AiAppUsageSnapshot } from "@/types/ai-app-usage"
 import type { AiUsageSnapshot } from "@/types/ai-usage"
 import type { AideStatusSnapshot } from "@/types/aide-status"
-import type { AideWorkReportsSnapshot } from "@/types/aide-work-reports"
 import type { GitHubUsageSnapshot } from "@/types/github-usage"
 import type { HostStatsView } from "@/types/host-stats"
 import type { OnePasswordUsageSnapshot } from "@/types/onepassword-usage"
@@ -61,8 +60,6 @@ interface DashboardData extends DashboardInitialData {
     onepasswordUsage: OnePasswordUsageSnapshot | null
     /** AIDEの動作状況。未取得なら null */
     aideStatus: AideStatusSnapshot | null
-    /** dotが報告した作業の状況（#575）。未取得なら null */
-    aideWorkReports: AideWorkReportsSnapshot | null
     /** 残り時間の計算に使う現在時刻。各コンポーネントが個別にタイマーを持たなくて済むよう配る */
     now: number
     /** いずれかのデータを最後に受け取った時刻（epoch ミリ秒）。未受信なら null */
@@ -143,12 +140,6 @@ export function DashboardDataProvider({
         selectAsIs,
         null
     )
-    const aideWorkReports = usePolledJson<AideWorkReportsSnapshot | null>(
-        "/api/aide-work-reports",
-        AIDE_STATUS_INTERVAL_MS,
-        selectAsIs,
-        null
-    )
     const uptimeKuma = usePolledJson<MonitorFeed<UptimeKumaMonitor>>(
         "/api/uptime-kuma",
         MONITOR_INTERVAL_MS,
@@ -174,7 +165,6 @@ export function DashboardDataProvider({
             githubUsage.refresh,
             onepasswordUsage.refresh,
             aideStatus.refresh,
-            aideWorkReports.refresh,
             uptimeKuma.refresh,
             uptimeRobot.refresh,
         ],
@@ -185,7 +175,6 @@ export function DashboardDataProvider({
             githubUsage.refresh,
             onepasswordUsage.refresh,
             aideStatus.refresh,
-            aideWorkReports.refresh,
             uptimeKuma.refresh,
             uptimeRobot.refresh,
         ]
@@ -221,7 +210,6 @@ export function DashboardDataProvider({
             githubUsage: githubUsage.value,
             onepasswordUsage: onepasswordUsage.value,
             aideStatus: aideStatus.value,
-            aideWorkReports: aideWorkReports.value,
             uptimeKuma: uptimeKuma.value,
             uptimeRobot: uptimeRobot.value,
             now,
@@ -232,7 +220,6 @@ export function DashboardDataProvider({
                 githubUsage.updatedAt,
                 onepasswordUsage.updatedAt,
                 aideStatus.updatedAt,
-                aideWorkReports.updatedAt,
                 uptimeKuma.updatedAt,
                 uptimeRobot.updatedAt,
             ]),
@@ -255,7 +242,6 @@ export function DashboardDataProvider({
             githubUsage,
             onepasswordUsage,
             aideStatus,
-            aideWorkReports,
             uptimeKuma,
             uptimeRobot,
             now,
