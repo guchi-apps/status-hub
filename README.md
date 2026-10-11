@@ -291,6 +291,9 @@ sudo systemctl start ops-dashboard-host-stats.service
 systemctl status ops-dashboard-host-stats.service
 ```
 
+Pi Zero W（自宅LANのSwitchBot取得機）は `host-stats.pi0w.env.example` を使い、センサーごとの取得状況も送る。
+Piはこのリポジトリを持たないため、サブPCからSSHで配る。手順と判定は [docs/pi0w-host-stats.md](docs/pi0w-host-stats.md)。
+
 `/etc/ops-dashboard-host-stats.env` は各ホストで新規に作るファイルで、Gitでもデプロイでも管理していない。
 アプリ本体の `.env`（デプロイのたびに書き換わり、全シークレットを含む）とは意図的に分けている。
 

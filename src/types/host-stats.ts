@@ -56,6 +56,37 @@ export interface HostStatsTimer {
     running?: boolean
 }
 
+/**
+ * センサー1台分の取得状況（#581）。
+ *
+ * ホストの死活とは別に「センサーの値が取れているか」を見るためのもの。Pi Zero W の SwitchBot 取得は
+ * 一部のセンサーだけ見つからなくても終了コード0で終わる（部分成功）ため、定期ジョブの結果だけでは
+ * 片方の停止に気づけない。取得スクリプトがセンサーごとに書き残した時刻をエージェントが送ってくる。
+ */
+export interface HostStatsSensor {
+    /** センサーの表示名（取得側の設定の name） */
+    name: string
+    /** 最後に取得を試みた時刻（ISO 8601）。一度も試みていなければ undefined */
+    lastAttemptAt?: string
+    /** 最後に取得・送信まで成功した時刻（ISO 8601）。一度も成功していなければ undefined */
+    lastSuccessAt?: string
+    /** 直近の試行の結果（success / not_found / post_failed など、取得側が決める短い語） */
+    lastResult?: string
+}
+
+/**
+ * センサーの取得状況のまとまり。
+ * `HOST_STATS_SENSOR_STATUS_FILE` を設定していないホストは項目ごと送ってこないため undefined。
+ */
+export interface HostStatsSensors {
+    /**
+     * 状態ファイルを読めたか。false は「センサーが止まっている」ではなく「取得側がまだ書いていない・
+     * 読めなかった」ことを表す。0件を正常と取り違えないよう、空の一覧とは区別する。
+     */
+    available: boolean
+    items: HostStatsSensor[]
+}
+
 /** 資源を食っている上位プロセス。CPU順とメモリ順で同じ形のものを別々に持つ */
 export interface HostStatsProcess {
     name: string
@@ -217,6 +248,8 @@ export interface HostStatsReport {
      * `HOST_STATS_TIMERS` を設定していないホストは項目ごと送ってこないため undefined になる。
      */
     timers?: HostStatsTimer[]
+    /** センサーの取得状況（#581）。設定していないホストでは undefined */
+    sensors?: HostStatsSensors
 }
 
 /** 保管済みの最新レポート。鮮度判定にはサーバー側で打った receivedAt を使う */
@@ -243,6 +276,35 @@ export interface HostStatsHistoryPoint {
     iow?: number
 }
 
+/**
+ * センサー1台分の判定結果（#581）。判定は `src/lib/host-stats/sensors.ts` の `evaluateSensors`。
+ * - ok: 閾値内に成功している
+ * - retrying: 直近の1回は失敗したが、閾値内に成功がある（取りこぼしの範囲）
+ * - stale: 閾値を超えて成功していない（取得停止）
+ * - unknown: ホストが応答していない・記録が無いなど、判断できない
+ */
+export type HostSensorState = "ok" | "retrying" | "stale" | "unknown"
+
+export interface HostSensorStatus {
+    name: string
+    state: HostSensorState
+    /** 異常として数えるか。unknown は誤検知になるため数えない */
+    abnormal: boolean
+    /** 画面に出す1行（「取得 3分前」「取得停止（最終成功 2時間前）」など） */
+    label: string
+    /** 最後の成功からの経過秒数。成功の記録が無ければ undefined */
+    successAgeSeconds?: number
+    lastResult?: string
+}
+
+export interface HostSensorsView {
+    /** 状態ファイルを読めたか（`HostStatsSensors.available`） */
+    available: boolean
+    /** 取得停止とみなす閾値（秒）。画面の注記に使う */
+    staleAfterSeconds: number
+    items: HostSensorStatus[]
+}
+
 /** 1ホスト分の表示データ */
 export interface HostStatsHostView {
     id: string
@@ -252,6 +314,8 @@ export interface HostStatsHostView {
     ageSeconds: number
     online: boolean
     history: HostStatsHistoryPoint[]
+    /** センサーの取得状況の判定。センサーを送ってこないホストでは undefined */
+    sensors?: HostSensorsView
 }
 
 /** GET /api/host-stats のレスポンス */

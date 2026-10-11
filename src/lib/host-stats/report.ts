@@ -5,6 +5,7 @@ import type {
     HostStatsProcess,
     HostStatsRate,
     HostStatsReport,
+    HostStatsSensors,
     HostStatsService,
     HostStatsSessions,
     HostStatsTimer,
@@ -27,6 +28,7 @@ const MAX_SESSION_USERS = 10
 const MAX_TMUX_SESSIONS = 20
 const MAX_TMUX_COMMANDS = 4
 const MAX_APPS = 30
+const MAX_SENSORS = 10
 const MAX_TEXT_LENGTH = 120
 
 /** ホスト識別子に使える文字。保存先のディレクトリ名になるため、パス区切りなどを通さない */
@@ -289,6 +291,37 @@ function parseApps(value: unknown): HostStatsApps | undefined {
     }
 }
 
+/**
+ * センサーの取得状況（#581）。
+ * `HOST_STATS_SENSOR_STATUS_FILE` を設定していないホストは項目ごと送ってこないため、undefined を通す。
+ * 時刻は鮮度の判定に使うため、日時として読めない値は落とす（壊れた値で「最新」に見せない）。
+ */
+function parseSensors(value: unknown): HostStatsSensors | undefined {
+    if (value === undefined || value === null) return undefined
+    const record = asRecord(value, "sensors")
+    const items = record.items === undefined || record.items === null ? [] : record.items
+    if (!Array.isArray(items)) fail("sensors.items が配列ではありません")
+
+    return {
+        available: record.available === true,
+        items: items.slice(0, MAX_SENSORS).map((entry, index) => {
+            const item = asRecord(entry, `sensors.items[${index}]`)
+            return {
+                name: asText(item.name, `sensors.items[${index}].name`),
+                lastAttemptAt: asOptionalTimestamp(item.lastAttemptAt, `sensors.items[${index}].lastAttemptAt`),
+                lastSuccessAt: asOptionalTimestamp(item.lastSuccessAt, `sensors.items[${index}].lastSuccessAt`),
+                lastResult: asOptionalText(item.lastResult, `sensors.items[${index}].lastResult`),
+            }
+        }),
+    }
+}
+
+function asOptionalTimestamp(value: unknown, field: string): string | undefined {
+    const text = asOptionalText(value, field)
+    if (text === undefined) return undefined
+    return Number.isFinite(new Date(text).getTime()) ? text : undefined
+}
+
 /** ホスト名から保存先に使える識別子を作る（エージェントが id を送ってこない場合の保険） */
 function slugFromHostname(hostname: string): string {
     const slug = hostname
@@ -348,5 +381,6 @@ export function parseHostStatsReport(input: unknown): HostStatsReport & { id: st
         apps: parseApps(record.apps),
         services: parseServices(record.services),
         timers: parseTimers(record.timers),
+        sensors: parseSensors(record.sensors),
     }
 }

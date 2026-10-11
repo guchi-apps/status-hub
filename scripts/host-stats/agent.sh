@@ -28,6 +28,11 @@
 #                           未設定なら集計せず、項目ごと送らない（#226）
 #   HOST_STATS_APP_DISK_INTERVAL
 #                           任意。アプリ別のディスク使用量を測り直す間隔の秒数（既定: 3600）
+#   HOST_STATS_SENSOR_STATUS_FILE
+#                           任意。センサーごとの取得状況を取得スクリプトが書き残すファイル（#581）。
+#                           1行1センサーの「名前<TAB>最終試行(epoch秒)<TAB>最終成功(epoch秒)<TAB>結果」。
+#                           記録の無い時刻は 0、結果は - で埋める（タブ区切りの空欄は read で潰れるため）。
+#                           未設定なら項目ごと送らない。設定したのに読めなければ available:false で送る
 #
 # `--print` を付けて実行すると、送信せずに組み立てたJSONを表示する（設置時の確認用）。
 
@@ -68,6 +73,7 @@ TMUX_SOCKET_ROOT="${HOST_STATS_TMUX_SOCKET_ROOT:-/tmp}"
 SESSION_STATE_SUBDIR="${HOST_STATS_SESSION_STATE_SUBDIR:-.local/state/issue-deck/sessions}"
 APPS_ROOT="${HOST_STATS_APPS_ROOT:-}"
 APP_DISK_INTERVAL="${HOST_STATS_APP_DISK_INTERVAL:-3600}"
+SENSOR_STATUS_FILE="${HOST_STATS_SENSOR_STATUS_FILE:-}"
 # ディスク使用量のキャッシュの置き場。ユニットの StateDirectory= が STATE_DIRECTORY を渡してくる
 APP_DISK_CACHE_DIR="${STATE_DIRECTORY:-/var/lib/ops-dashboard-host-stats}"
 
@@ -535,6 +541,52 @@ collect_apps() {
     printf '}'
 }
 
+# センサーの最大件数。ダッシュボード側の上限と合わせる
+MAX_SENSORS=10
+
+# epoch秒をISO 8601へ直す。空・0（記録なし）・数字以外は何も出さない
+epoch_to_iso8601() {
+    case "${1:-}" in
+        "" | 0 | *[!0-9]*) return 0 ;;
+    esac
+    date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true
+}
+
+# センサーごとの取得状況（#581）。取得スクリプト（pi0w_260719 の switchbot_to_myroom.py）が書いた
+# 状態ファイルを読むだけで、BLE にもセンサーにも触れない。
+# Pi Zero W の SwitchBot 取得は、片方のセンサーだけ見つからなくても終了コード0で終わる（部分成功）。
+# 定期ジョブの結果では片方の停止に気づけないため、センサー単位の最終成功時刻を別に送る。
+# 判定（何分で停止とみなすか）はダッシュボード側で行い、ここでは時刻を運ぶだけにする。
+collect_sensors() {
+    local first=1 count=0 name attempt success result
+    [ -n "$SENSOR_STATUS_FILE" ] || return 0
+
+    # 取得スクリプトがまだ一度も書いていない・権限で読めない。0件（正常）と取り違えないよう区別して送る
+    if [ ! -r "$SENSOR_STATUS_FILE" ]; then
+        printf '{"available":false,"items":[]}'
+        return 0
+    fi
+
+    printf '{"available":true,"items":['
+    while IFS=$'\t' read -r name attempt success result; do
+        [ -n "$name" ] || continue
+        [ "$count" -lt "$MAX_SENSORS" ] || break
+        count=$((count + 1))
+
+        attempt="$(epoch_to_iso8601 "$attempt")"
+        success="$(epoch_to_iso8601 "$success")"
+
+        [ "$first" -eq 1 ] || printf ','
+        first=0
+        printf '{"name":"%s"' "$(json_escape "$name")"
+        [ -z "$attempt" ] || printf ',"lastAttemptAt":"%s"' "$attempt"
+        [ -z "$success" ] || printf ',"lastSuccessAt":"%s"' "$success"
+        case "$result" in "" | -) ;; *) printf ',"lastResult":"%s"' "$(json_escape "$result")" ;; esac
+        printf '}'
+    done <"$SENSOR_STATUS_FILE"
+    printf ']}'
+}
+
 # 再起動待ちと未適用の更新。いずれもファイルを見るだけで、apt を毎分叩いたりはしない
 collect_maintenance() {
     local reboot="false" updates="" security=""
@@ -945,7 +997,7 @@ os_name() {
 }
 
 build_payload() {
-    local swap temperature tmux_output tmux_sessions tmux_total timers apps cpu_model cpu_threads
+    local swap temperature tmux_output tmux_sessions tmux_total timers apps sensors cpu_model cpu_threads
     collect_samples
     swap="$(collect_swap)"
     temperature="$(collect_temperature)"
@@ -961,6 +1013,8 @@ build_payload() {
 
     # HOST_STATS_APPS_ROOT 未設定のホストでは空になり、項目ごと送らない
     apps="$(collect_apps)"
+
+    sensors="$(collect_sensors)"
 
     printf '{'
     printf '"version":%d,' "$PAYLOAD_VERSION"
@@ -992,6 +1046,7 @@ build_payload() {
     [ -z "$apps" ] || printf '"apps":%s,' "$apps"
     printf '"services":%s' "$(collect_services)"
     [ -z "$timers" ] || printf ',"timers":%s' "$timers"
+    [ -z "$sensors" ] || printf ',"sensors":%s' "$sensors"
     printf '}'
 }
 
