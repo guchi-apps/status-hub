@@ -38,6 +38,10 @@
 
 set -euo pipefail
 
+# ヒアストリング（<<<）は使わない。bash 5.0 以前（Raspbian 10 など）は一時ファイルを /tmp に作るが、
+# ユニットの ProtectSystem=strict で /tmp は読み取り専用になり「ヒアドキュメント用一時ファイルを
+# 作成できません」で失敗する（#581）。プロセス置換（< <(...)）はパイプなので一時ファイルを作らない
+
 PAYLOAD_VERSION=1
 
 # CPU・ネットワーク・ディスクI/Oは「1秒あけて2回読んだ差分」から求める。
@@ -597,7 +601,7 @@ collect_maintenance() {
     # apt-check を毎分呼ぶとCPUを1.5秒ほど使うが、この値は1日に数回しか変わらないため割に合わない。
     # ESM（有償のサポート延長）の行は、契約していなければ適用できない件数なので数えない
     if [ -r /var/lib/update-notifier/updates-available ]; then
-        read -r updates security <<< "$(awk '
+        read -r updates security < <(awk '
             /ESM/ { next }
             !updates && /^[0-9]+/ { updates = $1 }
             !security && /security|セキュリティ/ {
@@ -605,7 +609,7 @@ collect_maintenance() {
                 if (RSTART) security = substr($0, RSTART, RLENGTH)
             }
             END { printf "%d %d", updates, security }
-        ' /var/lib/update-notifier/updates-available)"
+        ' /var/lib/update-notifier/updates-available)
     fi
 
     printf '{"rebootRequired":%s' "$reboot"
@@ -625,7 +629,7 @@ collect_sessions() {
         [ "$first" -eq 1 ] || printf ','
         first=0
         printf '"%s"' "$(json_escape "$user")"
-    done <<< "$users"
+    done < <(printf '%s\n' "$users")
     printf ']}'
 }
 
@@ -842,7 +846,7 @@ collect_tmux() {
                     "$(json_escape "$user")"
 
                 if [ -n "$commands" ]; then
-                    IFS=',' read -r -a command_list <<< "$commands"
+                    IFS=',' read -r -a command_list < <(printf '%s\n' "$commands")
                     printf ',"commands":['
                     first_command=1
                     for pane_command in "${command_list[@]}"; do
