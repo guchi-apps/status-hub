@@ -11,7 +11,7 @@ import {
 import type { AiProviderMeteredUsage, AiUsageSnapshot, AiUsageWindow } from "@/types/ai-usage"
 import type { GitHubUsageSnapshot } from "@/types/github-usage"
 
-/** 概要タブに並べる内訳リポジトリの数。詳細はAI・GitHubタブで見る */
+/** 概要タブに並べる内訳リポジトリの数。詳細は利用枠タブで見る */
 const MAX_LISTED_REPOSITORIES = 3
 
 /** レート制限の枠の長さ（1時間）。経過位置の目印を出すのに使う */
