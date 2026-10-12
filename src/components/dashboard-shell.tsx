@@ -68,17 +68,9 @@ const TAB_LABELS: Record<TabId, string> = {
     overview: "概要",
     hosts: "ホスト",
     tmux: "tmux",
-    usage: "AI・GitHub・1Password",
+    usage: "利用枠",
     monitors: "監視",
     aide: "AIDE",
-}
-
-/**
- * 狭い画面用の短い名前。長い名前のままだと5つのタブが画面に収まらず、
- * 右端の「監視」がスクロールしないと見えなくなる（#96）
- */
-const TAB_SHORT_LABELS: Partial<Record<TabId, string>> = {
-    usage: "利用枠",
 }
 
 /**
@@ -323,8 +315,7 @@ export function DashboardShell({
                                     : "border-transparent text-muted-foreground hover:text-foreground"
                             )}
                         >
-                            <span className="sm:hidden">{TAB_SHORT_LABELS[tab] ?? TAB_LABELS[tab]}</span>
-                            <span className="hidden sm:inline">{TAB_LABELS[tab]}</span>
+                            {TAB_LABELS[tab]}
                             {counts[tab] !== undefined && counts[tab]! > 0 && (
                                 <span
                                     className={cn(
