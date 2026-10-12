@@ -59,9 +59,12 @@ export function getHistoryHours(): number {
     return readPositiveInt("HOST_STATS_HISTORY_HOURS", DEFAULT_HISTORY_HOURS)
 }
 
+/** 画面に並べる既定の順番（VPS・サブPC・Mac Mini・ラズパイ Zero W。#588） */
+const DEFAULT_DISPLAY_ORDER = "vps,subpc,macmini,pi0w"
+
 /** 画面に並べる順番。指定が無いホストは後ろへ回し、その中では識別子順にする */
 function getDisplayOrder(): string[] {
-    return (process.env.HOST_STATS_ORDER ?? "")
+    return (process.env.HOST_STATS_ORDER || DEFAULT_DISPLAY_ORDER)
         .split(",")
         .map((entry) => entry.trim())
         .filter(Boolean)

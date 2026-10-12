@@ -74,6 +74,18 @@ cd /tmp && sudo cp ops-dashboard-host-stats.{service,timer} /etc/systemd/system/
 ユニットは VPS・サブPCと同じもの。`ProtectSystem=strict`・`ProtectHome=read-only`・`StateDirectory=` は
 Raspbian 10（systemd 241）でも使える。状態ファイル（`/var/lib/myroom-pi/`）は読むだけなので `strict` のままでよい。
 
+## 実測（2026-10-11、Raspbian 10・Python 3.7.3・bash 5.0）
+
+| 項目 | 値 |
+| --- | --- |
+| エージェント1回（`time agent.sh --print`） | real 4.9秒・user 1.4秒・sys 2.0秒（1分ごとなのでシングルコアの約6%） |
+| センサーの状態ファイル | リビング・屋外とも `success`（取得スクリプト差し替え直後の1回） |
+
+- CPU時間の大半は sys で、`awk`・`sed`・`systemctl` などの外部コマンドの起動が占めている。BLE取得は待ち時間が
+  ほとんどで止まらない見込みだが、軽いとは言えない。BLE取得に影響が出るなら、送信間隔を延ばすか Pi 向けに処理を省く
+- **bash 5.0 はヒアストリング（`<<<`）を /tmp の一時ファイルで実現し、ユニットの `ProtectSystem=strict` で失敗する**
+  （「ヒアドキュメント用一時ファイルを作成できません」）。agent.sh はヒアストリングを使わず `< <(...)` で書く
+
 ## 実機で確かめること（人手）
 
 Pi で:

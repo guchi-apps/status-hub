@@ -129,7 +129,6 @@ jobs:
       WIDGET_TOKEN: ${{ secrets.WIDGET_TOKEN }}
       OPS_API_TOKEN: ${{ secrets.OPS_API_TOKEN }}
       AIDE_STATUS_TOKEN: ${{ secrets.AIDE_STATUS_TOKEN }}
-      AIDE_WORK_REPORTS_TOKEN: ${{ secrets.AIDE_WORK_REPORTS_TOKEN }}
       SHARED_TOKEN_API_SECRET: ${{ secrets.SHARED_TOKEN_API_SECRET }}
       SHARED_TOKEN_WRITE_SECRET: ${{ secrets.SHARED_TOKEN_WRITE_SECRET }}
       ISSUE_DECK_URL: ${{ vars.APP_BASE_URL }}
@@ -215,7 +214,6 @@ jobs:
       WIDGET_TOKEN: ${{ secrets.WIDGET_TOKEN }}
       OPS_API_TOKEN: ${{ secrets.OPS_API_TOKEN }}
       AIDE_STATUS_TOKEN: ${{ secrets.AIDE_STATUS_TOKEN }}
-      AIDE_WORK_REPORTS_TOKEN: ${{ secrets.AIDE_WORK_REPORTS_TOKEN }}
       SHARED_TOKEN_API_SECRET: ${{ secrets.SHARED_TOKEN_API_SECRET }}
       SHARED_TOKEN_WRITE_SECRET: ${{ secrets.SHARED_TOKEN_WRITE_SECRET }}
       ISSUE_DECK_URL: ${{ vars.APP_BASE_URL }}
@@ -283,7 +281,6 @@ jobs:
           WIDGET_TOKEN: ${{ env.WIDGET_TOKEN }}
           OPS_API_TOKEN: ${{ env.OPS_API_TOKEN }}
           AIDE_STATUS_TOKEN: ${{ env.AIDE_STATUS_TOKEN }}
-          AIDE_WORK_REPORTS_TOKEN: ${{ env.AIDE_WORK_REPORTS_TOKEN }}
           SHARED_TOKEN_API_SECRET: ${{ env.SHARED_TOKEN_API_SECRET }}
           SHARED_TOKEN_WRITE_SECRET: ${{ env.SHARED_TOKEN_WRITE_SECRET }}
           ISSUE_DECK_URL: ${{ env.ISSUE_DECK_URL }}
@@ -298,7 +295,7 @@ jobs:
           username: ${{ env.USERNAME }}
           key: ${{ env.SSH_PRIVATE_KEY }}
           port: ${{ env.SSH_PORT }}
-          envs: NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,ALLOWED_EMAILS,UPTIMEROBOT_READ_ONLY_KEY,UPTIMEKUMA_BASE_URL,UPTIMEKUMA_DASHBOARD_SLUG,UPTIMEKUMA_USERNAME,UPTIMEKUMA_PASSWORD,UPTIMEKUMA_ADMIN_TOKEN,HOST_STATS_TOKEN,SIGNALY_LOGIN_WEBHOOK_URL,SIGNALY_ALERT_WEBHOOK_URL,ANTHROPIC_OAUTH_REFRESH_TOKEN,OPENAI_CHATGPT_REFRESH_TOKEN,OPENAI_CHATGPT_ACCOUNT_ID,GH_USAGE_TOKEN,GH_USAGE_ORG,OP_SERVICE_ACCOUNT_TOKEN,WIDGET_TOKEN,OPS_API_TOKEN,AIDE_STATUS_TOKEN,AIDE_WORK_REPORTS_TOKEN,SHARED_TOKEN_API_SECRET,SHARED_TOKEN_WRITE_SECRET,ISSUE_DECK_URL,TYPESAFE_USAGE_URL,TYPESAFE_USAGE_TOKEN,AI_APP_USAGE_SOURCES_WRITE_TOKEN,WEB_PUSH_VAPID_PUBLIC_KEY,WEB_PUSH_VAPID_PRIVATE_KEY,TARGET_DIR
+          envs: NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,ALLOWED_EMAILS,UPTIMEROBOT_READ_ONLY_KEY,UPTIMEKUMA_BASE_URL,UPTIMEKUMA_DASHBOARD_SLUG,UPTIMEKUMA_USERNAME,UPTIMEKUMA_PASSWORD,UPTIMEKUMA_ADMIN_TOKEN,HOST_STATS_TOKEN,SIGNALY_LOGIN_WEBHOOK_URL,SIGNALY_ALERT_WEBHOOK_URL,ANTHROPIC_OAUTH_REFRESH_TOKEN,OPENAI_CHATGPT_REFRESH_TOKEN,OPENAI_CHATGPT_ACCOUNT_ID,GH_USAGE_TOKEN,GH_USAGE_ORG,OP_SERVICE_ACCOUNT_TOKEN,WIDGET_TOKEN,OPS_API_TOKEN,AIDE_STATUS_TOKEN,SHARED_TOKEN_API_SECRET,SHARED_TOKEN_WRITE_SECRET,ISSUE_DECK_URL,TYPESAFE_USAGE_URL,TYPESAFE_USAGE_TOKEN,AI_APP_USAGE_SOURCES_WRITE_TOKEN,WEB_PUSH_VAPID_PUBLIC_KEY,WEB_PUSH_VAPID_PRIVATE_KEY,TARGET_DIR
           script: |
             set -euo pipefail
             cd "${TARGET_DIR}"
@@ -334,8 +331,8 @@ jobs:
             update_env UPTIMEKUMA_PASSWORD "$UPTIMEKUMA_PASSWORD"
             update_env UPTIMEKUMA_ADMIN_TOKEN "$UPTIMEKUMA_ADMIN_TOKEN"
             update_env HOST_STATS_TOKEN "$HOST_STATS_TOKEN"
-            # 画面に並べる順番（先頭がVPS、以降は識別子順）。秘密ではないため直接指定する
-            update_env HOST_STATS_ORDER "vps"
+            # 画面に並べる順番（VPS・サブPC・Mac Mini・Pi Zero W の順、それ以外は識別子順）。秘密ではないため直接指定する
+            update_env HOST_STATS_ORDER "vps,subpc,macmini,pi0w"
             update_env SIGNALY_LOGIN_WEBHOOK_URL "$SIGNALY_LOGIN_WEBHOOK_URL"
             # secret未登録でもデプロイを落とさない（未設定なら通知しないだけ。#75）。
             # このスクリプトは set -u の下で動くため、素の $VAR だと未登録の間は必ず失敗する
@@ -350,8 +347,6 @@ jobs:
             update_env OPS_API_TOKEN "$OPS_API_TOKEN"
             # secret未登録でもデプロイを落とさない（未設定ならAIDEタブを出さないだけ。#237）
             update_env AIDE_STATUS_TOKEN "${AIDE_STATUS_TOKEN:-}"
-            # secret未登録でもデプロイを落とさない（未設定ならdotの作業状況の節を出さないだけ。#575）
-            update_env AIDE_WORK_REPORTS_TOKEN "${AIDE_WORK_REPORTS_TOKEN:-}"
             # secret未登録でもデプロイを落とさない（未設定ならAIDE_STATUS_TOKENへフォールバックするだけ。#444）
             update_env SHARED_TOKEN_API_SECRET "${SHARED_TOKEN_API_SECRET:-}"
             update_env SHARED_TOKEN_WRITE_SECRET "${SHARED_TOKEN_WRITE_SECRET:-}"
@@ -364,6 +359,11 @@ jobs:
             # secret未登録でもデプロイを落とさない（未設定なら通知のベルを出さないだけ。#263）
             update_env WEB_PUSH_VAPID_PUBLIC_KEY "${WEB_PUSH_VAPID_PUBLIC_KEY:-}"
             update_env WEB_PUSH_VAPID_PRIVATE_KEY "${WEB_PUSH_VAPID_PRIVATE_KEY:-}"
+
+            # 削除した機能のキーは、update_env で書かれなくなっても既存の .env に残り続ける。
+            # 不要な権限を持つトークンを本番に残さないため明示的に消す（dotの作業状況を削除した #589 の残り）
+            echo "Removing obsolete .env keys..."
+            bash scripts/remove-env-key.sh .env AIDE_WORK_REPORTS_TOKEN
 
             echo "Installing production dependencies..."
             npm install --omit=dev --no-audit --prefer-offline
