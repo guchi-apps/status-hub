@@ -14,12 +14,10 @@ export interface ChangelogEntry {
 // 新しいバージョンを配列の先頭に追記していく（changelog-ja skill の運用ルールに従う）
 export const changelog: ChangelogEntry[] = [
     {
-        version: "0.55.1",
+        version: "0.55.2",
         date: "2026-10-12",
         changes: [
-            "ホストの並び順を、VPS・サブPC・Mac Mini・Pi Zero Wの順に揃えました。",
-            "AIDEタブから「作業状況」の画面を取り除きました。",
-            "Pi Zero Wのセンサー取得状況を、より幅広い環境で正しく集計できるようにしました。",
+            "ホストの表示順を「VPS・サブPC・Mac Mini・Pi Zero W」に揃えました。AIDEタブのdotの作業状況表示は不要になったため削除しました。",
         ],
     },
     {
