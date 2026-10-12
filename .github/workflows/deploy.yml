@@ -347,7 +347,6 @@ jobs:
             update_env OPS_API_TOKEN "$OPS_API_TOKEN"
             # secret未登録でもデプロイを落とさない（未設定ならAIDEタブを出さないだけ。#237）
             update_env AIDE_STATUS_TOKEN "${AIDE_STATUS_TOKEN:-}"
-            # secret未登録でもデプロイを落とさない（未設定ならdotの作業状況の節を出さないだけ。#575）
             # secret未登録でもデプロイを落とさない（未設定ならAIDE_STATUS_TOKENへフォールバックするだけ。#444）
             update_env SHARED_TOKEN_API_SECRET "${SHARED_TOKEN_API_SECRET:-}"
             update_env SHARED_TOKEN_WRITE_SECRET "${SHARED_TOKEN_WRITE_SECRET:-}"
@@ -360,6 +359,11 @@ jobs:
             # secret未登録でもデプロイを落とさない（未設定なら通知のベルを出さないだけ。#263）
             update_env WEB_PUSH_VAPID_PUBLIC_KEY "${WEB_PUSH_VAPID_PUBLIC_KEY:-}"
             update_env WEB_PUSH_VAPID_PRIVATE_KEY "${WEB_PUSH_VAPID_PRIVATE_KEY:-}"
+
+            # 削除した機能のキーは、update_env で書かれなくなっても既存の .env に残り続ける。
+            # 不要な権限を持つトークンを本番に残さないため明示的に消す（dotの作業状況を削除した #589 の残り）
+            echo "Removing obsolete .env keys..."
+            bash scripts/remove-env-key.sh .env AIDE_WORK_REPORTS_TOKEN
 
             echo "Installing production dependencies..."
             npm install --omit=dev --no-audit --prefer-offline
