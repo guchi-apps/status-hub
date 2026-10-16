@@ -14,6 +14,13 @@ export interface ChangelogEntry {
 // 新しいバージョンを配列の先頭に追記していく（changelog-ja skill の運用ルールに従う）
 export const changelog: ChangelogEntry[] = [
     {
+        version: "0.55.3",
+        date: "2026-10-17",
+        changes: [
+            "ダッシュボードの「AI・GitHub・1Password」タブの名前を、PCでもスマホでも「利用枠」に統一しました。",
+        ],
+    },
+    {
         version: "0.55.2",
         date: "2026-10-12",
         changes: [

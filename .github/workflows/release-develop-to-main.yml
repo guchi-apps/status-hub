@@ -22,6 +22,21 @@ on:
         type: choice
         default: auto
         options: [auto, patch, minor, major]
+      # 新方式（リリース候補の作成→検証→公開準備）の要求。issue-deckのサーバーが組み立てる
+      # JSONが渡る（guchi-apps/issue-deck#4623）。**この2つが無いと、issue-deck側は新方式に
+      # 未対応のリポジトリとして通常の開始を止める**（旧方式へは落とさない）。
+      # 指定があると共有ワークフローは旧方式の処理を行わず、候補の作成（candidate_request）か
+      # 公開準備＝正式バンプ（finalize_request）だけを行う。人が手で入力する用途ではない。
+      candidate_request:
+        description: "リリース候補の作成・更新の要求（issue-deckが渡す。手入力しない）"
+        required: false
+        type: string
+        default: ""
+      finalize_request:
+        description: "リリース候補の公開準備（正式バンプ）の要求（issue-deckが渡す。手入力しない）"
+        required: false
+        type: string
+        default: ""
   # バンプPRがdevelopへマージされバージョンが変わったときに再起動して、develop→mainのPRを
   # 自動作成する。通常のフィーチャーpushでは変わらないため起動しない。
   push:
@@ -35,7 +50,7 @@ concurrency:
 
 jobs:
   release:
-    uses: guchi-apps/issue-deck/.github/workflows/reusable-release-develop-to-main.yml@workflows/v50
+    uses: guchi-apps/issue-deck/.github/workflows/reusable-release-develop-to-main.yml@workflows/v52
     # バージョンの読み書きに関する3つのinput（version-file・version-query・bump-command）は
     # すべて既定値でよい。ルートのpackage.jsonに version を持ち、npmを使い、`preversion`を
     # 持たないため。**共有ワークフローはバージョンbumpのために依存関係をインストールしない**
@@ -46,6 +61,9 @@ jobs:
       # pushトリガー（バンプPRのマージ）で起動したときは`inputs`自体が無いため空文字を渡す。
       # そちらの実行はdevelop→mainのPR作成だけを行い、上げ幅を使わない。
       bump-kind: ${{ github.event_name == 'workflow_dispatch' && inputs.bump_kind || '' }}
+      # 新方式の要求。pushトリガーでは`inputs`が無いため、同じく空文字を渡す。
+      candidate-request: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_request || '' }}
+      finalize-request: ${{ github.event_name == 'workflow_dispatch' && inputs.finalize_request || '' }}
     secrets: inherit
     # **呼ばれる側の権限はcallerの付与範囲を超えられない。** issues が write なのは、
     # 呼ばれる側の notify-failure ジョブがリリース対象issueへ失敗を通知するため。

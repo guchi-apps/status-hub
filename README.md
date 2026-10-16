@@ -19,7 +19,7 @@ Supabaseダッシュボードの Authentication → URL Configuration の Redire
 | 概要 | 全項目を畳んで1画面に収めたもの。ホストごとの主要4指標、tmuxの稼働・待機、AI/GitHubの残枠、監視の状態タイル |
 | ホスト | ホストごとの全指標と推移（Swap・温度・ネットワーク・ディスクI/O・上位プロセス・ディスク内訳） |
 | tmux | セッションの一覧。稼働中・待機中・放置の別、実行中コマンド、作業ディレクトリ、最終活動 |
-| AI・GitHub・1Password | 提供元ごとの制限枠と課金、アプリ別のAI利用（使用モデル・呼出回数・トークン・概算金額）、Actionsのリポジトリ別内訳、1Passwordのレート制限 |
+| 利用枠 | 提供元ごとの制限枠と課金、アプリ別のAI利用（使用モデル・呼出回数・トークン・概算金額）、Actionsのリポジトリ別内訳、1Passwordのレート制限 |
 | 監視 | Uptime Kuma / UptimeRobot のheartbeatと応答時間 |
 
 選んだタブは端末ごとに `localStorage` へ保存する。
@@ -498,7 +498,7 @@ TypeSafeの公開APIはアカウントの残高・無料枠を返さず、POST /
 ### アプリ別のAI利用
 
 「どのアプリが、どのモデルで、どれくらいAIを使っているか」を、上の提供元別の利用枠とは別の軸で出す
-（[issue #325](https://github.com/guchi-apps/status-hub/issues/325)）。AI・GitHub・1Passwordタブの、AI Usageの下の区画で、
+（[issue #325](https://github.com/guchi-apps/status-hub/issues/325)）。利用枠タブの、AI Usageの下の区画で、
 24時間・7日間を切り替え、アプリの行を開くと機能ごと×モデルごとの内訳が出る。
 
 **各アプリが使用量APIを持ち、ダッシュボードのサーバーがそれを読みにいく**（TypeSafe・AIDEと同じ向き）。
