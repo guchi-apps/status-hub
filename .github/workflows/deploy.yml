@@ -290,12 +290,15 @@ jobs:
           WEB_PUSH_VAPID_PUBLIC_KEY: ${{ env.WEB_PUSH_VAPID_PUBLIC_KEY }}
           WEB_PUSH_VAPID_PRIVATE_KEY: ${{ env.WEB_PUSH_VAPID_PRIVATE_KEY }}
           TARGET_DIR: ${{ env.TARGET_DIR }}
+          # 稼働している版の照合に使う（#607。guchi-apps/car-care#257 と同じ形）。ヘルスチェックが
+          # `/api/app-version` の `sha` と突き合わせる。コミットの SHA は公開情報なのでそのまま渡してよい
+          APP_COMMIT_SHA: ${{ github.sha }}
         with:
           host: ${{ env.HOST }}
           username: ${{ env.USERNAME }}
           key: ${{ env.SSH_PRIVATE_KEY }}
           port: ${{ env.SSH_PORT }}
-          envs: NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,ALLOWED_EMAILS,UPTIMEROBOT_READ_ONLY_KEY,UPTIMEKUMA_BASE_URL,UPTIMEKUMA_DASHBOARD_SLUG,UPTIMEKUMA_USERNAME,UPTIMEKUMA_PASSWORD,UPTIMEKUMA_ADMIN_TOKEN,HOST_STATS_TOKEN,SIGNALY_LOGIN_WEBHOOK_URL,SIGNALY_ALERT_WEBHOOK_URL,ANTHROPIC_OAUTH_REFRESH_TOKEN,OPENAI_CHATGPT_REFRESH_TOKEN,OPENAI_CHATGPT_ACCOUNT_ID,GH_USAGE_TOKEN,GH_USAGE_ORG,OP_SERVICE_ACCOUNT_TOKEN,WIDGET_TOKEN,OPS_API_TOKEN,AIDE_STATUS_TOKEN,SHARED_TOKEN_API_SECRET,SHARED_TOKEN_WRITE_SECRET,ISSUE_DECK_URL,TYPESAFE_USAGE_URL,TYPESAFE_USAGE_TOKEN,AI_APP_USAGE_SOURCES_WRITE_TOKEN,WEB_PUSH_VAPID_PUBLIC_KEY,WEB_PUSH_VAPID_PRIVATE_KEY,TARGET_DIR
+          envs: APP_COMMIT_SHA,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,ALLOWED_EMAILS,UPTIMEROBOT_READ_ONLY_KEY,UPTIMEKUMA_BASE_URL,UPTIMEKUMA_DASHBOARD_SLUG,UPTIMEKUMA_USERNAME,UPTIMEKUMA_PASSWORD,UPTIMEKUMA_ADMIN_TOKEN,HOST_STATS_TOKEN,SIGNALY_LOGIN_WEBHOOK_URL,SIGNALY_ALERT_WEBHOOK_URL,ANTHROPIC_OAUTH_REFRESH_TOKEN,OPENAI_CHATGPT_REFRESH_TOKEN,OPENAI_CHATGPT_ACCOUNT_ID,GH_USAGE_TOKEN,GH_USAGE_ORG,OP_SERVICE_ACCOUNT_TOKEN,WIDGET_TOKEN,OPS_API_TOKEN,AIDE_STATUS_TOKEN,SHARED_TOKEN_API_SECRET,SHARED_TOKEN_WRITE_SECRET,ISSUE_DECK_URL,TYPESAFE_USAGE_URL,TYPESAFE_USAGE_TOKEN,AI_APP_USAGE_SOURCES_WRITE_TOKEN,WEB_PUSH_VAPID_PUBLIC_KEY,WEB_PUSH_VAPID_PRIVATE_KEY,TARGET_DIR
           script: |
             set -euo pipefail
             cd "${TARGET_DIR}"
@@ -321,6 +324,13 @@ jobs:
             # 未設定だと development 扱いになり、本番DBと食い違って全拒否になる
             update_env ACCESS_ENVIRONMENT production
             update_env PORT "$PORT"
+            # 稼働中の版の照合用（#607）。PM2の起動より前に書くので、新しいプロセスが読む。
+            # 空のまま書くと照合できないデプロイになるため、ここで止める
+            if [ -z "${APP_COMMIT_SHA:-}" ]; then
+              echo "APP_COMMIT_SHA is empty."
+              exit 1
+            fi
+            update_env APP_COMMIT_SHA "$APP_COMMIT_SHA"
             update_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
             update_env NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
             update_env ALLOWED_EMAILS "$ALLOWED_EMAILS"
@@ -381,15 +391,21 @@ jobs:
             echo "Health check..."
             # Next.js は起動完了までに数秒かかる。1回だけの curl では起動を待ちきれず、
             # アプリが正常に立ち上がっていても deploy ジョブが失敗する（guchi-apps/docs#29）。
+            # /login は旧版が動いたままでも 200 を返すため、`/api/app-version` が返す `sha` が
+            # 今回デプロイしたコミットと一致するまで成功にしない（#607）。`/` は認証でリダイレクト
+            # されるため使わない（`/api/app-version` は src/lib/public-paths.ts で未ログインでも通す）。
+            body=""
             for i in $(seq 1 30); do
-              if curl -fsS -o /dev/null "http://127.0.0.1:${PORT}/login"; then
-                echo "Deployment successful."
+              body="$(curl -fsS "http://127.0.0.1:${PORT}/api/app-version" 2>/dev/null || true)"
+              if [ -n "$body" ] && printf '%s' "$body" | grep -qF "\"sha\":\"${APP_COMMIT_SHA}\""; then
+                echo "Deployment successful. (sha=${APP_COMMIT_SHA})"
                 exit 0
               fi
               sleep 2
             done
 
-            echo "Health check failed after 60s."
+            echo "Health check failed after 60s: /api/app-version did not report sha=${APP_COMMIT_SHA}."
+            echo "last response: ${body:-<none>}"
             pm2 describe ops-dashboard || true
             pm2 logs ops-dashboard --lines 50 --nostream || true
             exit 1

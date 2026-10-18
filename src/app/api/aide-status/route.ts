@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
  *
  * 画面からしか使わないため、他の読み取りAPIと違って `OPS_API_TOKEN` の経路は付けない。
  * AIDEのジョブの失敗理由やMCPの利用記録を載せるので、ログインの内側に閉じておく
- * （src/proxy.ts の PUBLIC_PATH_PREFIXES にも載せていない）。
+ * （src/lib/public-paths.ts の PUBLIC_PATH_PREFIXES にも載せていない）。
  */
 export async function GET() {
     const { response } = await requireSessionForApi()
