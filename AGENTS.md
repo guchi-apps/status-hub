@@ -11,8 +11,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 運用ルールと、READMEに書かれていない判断基準だけを書く。
 
 **GitHubのリポジトリ名だけを `status-hub` に改めた（#457）。** PM2のプロセス名・systemdユニット名・
-1Passwordの `apps/ops-dashboard` アイテム・`TARGET_DIR`・`NOTIFY_APP` などの識別子は本番が参照しているため
+1Passwordの `apps/ops-dashboard` アイテム・VPS上の置き場（`/home/github-user/apps/ops-dashboard`）・`NOTIFY_APP` などの識別子は本番が参照しているため
 `ops-dashboard` のまま据え置いている。**これらを黙って改名しないこと**（改名するなら手作業を伴う別Issueにする）。
+本番デプロイのgate（`app-deploy-gate`）のアプリ名も、置き場とPM2のプロセス名に合わせて `ops-dashboard` にしている（#607。下の「本番デプロイ」）。
 
 **GitHub Actions 上での無人実行は、このリポジトリをチェックアウトしたワークツリーしか参照できない。**
 ローカル実行ではユーザー個人環境のグローバルルール（`~/.claude/CLAUDE.md`）も読み込まれるが、
@@ -109,7 +110,7 @@ RSSを下げるため、次の2点を入れている（#291。guchi-apps/issue-d
   取ってヒープが膨らむため明示している。**Nodeのメジャーを上げたら測り直す**（既定値はV8の版で変わる）。
   `max_memory_restart` を先に下げると再起動ループになる（issue-deck#1546・#2331）ので、変えるなら
   反映後の `VmHWM` を測ってから（下の「反映前後の実測」）
-- `deploy.yml` は設定ファイル名を2か所（アーカイブと掃除の `rm -rf`）で書いている。名前を変えたら両方直す
+- `deploy.yml` はアーカイブに設定ファイル名（`next.config.mjs`）を書いている。旧配布物の掃除はVPSのgateが前回の配布物の一覧から行う（#607）ため、名前を変えたらアーカイブ側を直す
 
 ### 反映前後の実測（#304）
 
@@ -468,7 +469,7 @@ ChatGPTの5時間枠は対象外（Issueの指定）。
 
 - **`ALLOWED_EMAILS` は初回のDB作成時に管理者として取り込むだけ。** 判定へ戻さないこと。判定は `src/lib/access/status-hub.ts`
   （30秒キャッシュ。DBが読めないときは直前の判定を最大5分、一度も読めていなければ拒否）。**読めないことを理由に許可を広げない**
-- **`ACCESS_ENVIRONMENT` は `deploy.yml` の `update_env ACCESS_ENVIRONMENT production` 1行で渡す**（秘密ではなく、env ブロックは
+- **`ACCESS_ENVIRONMENT` は `deploy.yml` の `Send environment variables` の `printf '%s\n' "ACCESS_ENVIRONMENT=production"` 1行で渡す**（秘密ではなく、env ブロックは
   `generate-workflow-env-block.sh` の生成物のため触らない）。DBの記録と食い違えば全拒否。直すのは `scripts/access-recover.mjs set-environment`
 - **`node:sqlite` の型は `src/types/node-sqlite.d.ts` に手書き**（`@types/node` は v20 で型が無い。依存は上げていない）。使うメソッドを増やすときはここへ足す。
   CI・デプロイのNodeは22.23.1（`.nvmrc`）。`node:sqlite` はフラグ無しで動くがExperimentalWarningが出る
@@ -542,6 +543,24 @@ mod_proxy はクライアントが送った値を消さず、末尾へ実IPを�
 
 - 機能開発: `develop`
 - 安定版 / 本番デプロイ: `main`（マージ時に GitHub Actions が VPS へデプロイ）
+
+### 本番デプロイ（app-deploy-gate。#607）
+
+`deploy.yml` の `deploy` ジョブは、VPSへシェルを取らず、このアプリ専用の鍵（repo secret `SSH_PRIVATE_KEY`。
+1Passwordの正は `op://apps/status-hub/deploy-ssh-key`）で gate（`/usr/local/sbin/app-deploy-gate`。
+guchi-apps/vps#275・#301）を呼ぶ。送れるのは `upload`（配布物）・`env`（標準入力の `KEY=VALUE`）・`deploy` の3語だけ。
+
+- **gateのアプリ名は `ops-dashboard`**（リポジトリ名の `status-hub` ではない）。gateは置き場を
+  `/home/github-user/apps/<アプリ名>`、PM2のプロセスを `<アプリ名>` と決め打ちするため、旧名のままの
+  置き場・プロセス名（`deploy/ecosystem.config.js` の `name`）に合わせる。置き場は鍵の `command=` が固定し、
+  `TARGET_DIR` はもう使わない（マニフェストには移行を確かめるまで残す）
+- **従来 `.env` へ書いていた値は、すべて `Send environment variables` で送る。** StatusHubは他アプリの
+  ログイン許可を判定する（共通アクセス設定）ため、1つ落とすだけで全アプリのログインに響く。
+  値を足すときは step の `env:` と `names=(...)` の両方へ足す。改行を含む値はgateへ送れないため、step が `::error::` で止める
+- gateは `.env` の**キーを消せない**。不要になったキーを本番から消すときは、VPSで手作業になる
+  （従来の `scripts/remove-env-key.sh` による削除は gate に移せず、デプロイから外した）
+- 旧配布物の削除・展開・`npm ci --omit=dev`・PM2の再起動・稼働版の照合（`.env` の `APP_COMMIT_SHA` と
+  `/api/app-version` の `sha`）はgateが行う。`.data/`（アクセス設定DB・ホストの観測値）は削除対象に入らない
 
 Issue専用ブランチは `develop` から作成し、ブランチ名は **`issue-<Issue番号>`** とする（例: `issue-64`）。
 ワークフローはブランチ名から対象Issueを特定するため、**この命名規約に従わないブランチはすべて対象外**になる。

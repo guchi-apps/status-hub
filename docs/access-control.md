@@ -8,7 +8,7 @@
 - SQLite（Node標準の `node:sqlite`）の `.data/access.sqlite`。`ACCESS_DB_PATH` で変更できる。`.gitignore` 済みで、デプロイでも消えない
 - **秘密情報の値は持たない。** アプリ別トークンはSHA-256のハッシュだけ。許可メールは個人情報のため、GitHub・ログへ実値を書かない
 - 本番と開発は `ACCESS_ENVIRONMENT`（`production` / `development`。未設定は `development`）で区別する。初期化時にDBへ記録され、
-  環境変数と食い違うと**全拒否**になる。本番は `deploy.yml` が `update_env ACCESS_ENVIRONMENT production` で渡す
+  環境変数と食い違うと**全拒否**になる。本番は `deploy.yml` が gate へ `ACCESS_ENVIRONMENT=production` を送って `.env` に書かせる（#607）
 - 初めてDBを作るときだけ、`ALLOWED_EMAILS` のメールを**StatusHubの管理者として取り込む**（移行用。以後は変更しても反映されない）
 
 ## 権限の構造
