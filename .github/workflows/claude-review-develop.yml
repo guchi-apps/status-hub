@@ -51,7 +51,7 @@ on:
 
 jobs:
   review:
-    uses: guchi-apps/issue-deck/.github/workflows/reusable-claude-review-develop.yml@workflows/v52
+    uses: guchi-apps/issue-deck/.github/workflows/reusable-claude-review-develop.yml@workflows/v53
     with:
       # 差分があれば毎回レビューする（冒頭コメント参照。#233）。
       review-file-threshold: "1"
@@ -70,9 +70,9 @@ jobs:
         (^|/)requirements[^/]*\.txt$|(^|/)pyproject\.toml$|(^|/)Pipfile$ :: 依存関係の変更 (requirements*.txt, pyproject.toml, Pipfile)
         /package\.json$ :: ルート以外の依存関係の変更 (frontend/package.json など。dependency-checkはルートしか見ない)
         # ここからops-dashboard固有（AGENTS.md「自動マージ不可カテゴリ」のうちパス名から判別できないもの）。
-        # `/api/*` はproxyの認証から外してあり（src/proxy.tsのPUBLIC_PATH_PREFIXES）、保護は
+        # `/api/*` はproxyの認証から外してあり（src/lib/public-paths.tsのPUBLIC_PATH_PREFIXES。src/proxy.tsが参照）、保護は
         # src/lib/session.ts とルート側だけが担う
-        ^src/(proxy\.ts$|lib/(supabase/|allowed-emails\.ts$|session\.ts$)) :: 認証・セッション・許可ユーザー判定の変更 (src/proxy.ts, src/lib/supabase/**, src/lib/allowed-emails.ts, src/lib/session.ts)
+        ^src/(proxy\.ts$|lib/(supabase/|allowed-emails\.ts$|session\.ts$|public-paths\.ts$)) :: 認証・セッション・許可ユーザー判定の変更 (src/proxy.ts, src/lib/supabase/**, src/lib/allowed-emails.ts, src/lib/session.ts, src/lib/public-paths.ts)
         ^src/(lib/access/|app/admin/|types/node-sqlite\.d\.ts$)|^scripts/access-(recover|migrate|migration-core)\.mjs$ :: 共通アクセス設定（認可の判定・管理画面・復旧CLI・移行CLI）の変更 (src/lib/access/**, src/app/admin/**, scripts/access-recover.mjs, scripts/access-migrate.mjs, scripts/access-migration-core.mjs)
         ^src/app/api/ :: APIルートの変更 (src/app/api/**。proxyの認証対象外で、ルート側で認証する)
         ^src/lib/(ai-usage/|claude-usage\.ts$|onepassword-usage\.ts$|uptimerobot\.ts$|uptime-kuma(-admin)?\.ts$|github-(usage|repo-visibility)\.ts$|(shared|ops-api)-token\.ts$|aide-status\.ts$|ai-app-usage/) :: 外部サービスのトークンを扱うAPIクライアントの変更 (AI利用枠・1Password・UptimeRobot・Uptime Kuma・GitHub・共有トークンAPI・AIDE・アプリ別AI利用)
@@ -80,7 +80,7 @@ jobs:
         ^scripts/sync-github-secrets\.sh$ :: シークレット同期スクリプトの変更 (scripts/sync-github-secrets.sh)
       # 上の uses: と同じタグを指定する。片方だけ上げると新しいワークフローで
       # 古いプロンプトが使われる。
-      prompts-ref: workflows/v52
+      prompts-ref: workflows/v53
     secrets: inherit
     permissions:
       contents: write

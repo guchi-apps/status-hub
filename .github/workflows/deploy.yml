@@ -109,7 +109,7 @@ jobs:
     #
     # このブロックは scripts/generate-workflow-env-block.sh で生成する（#51）。
     env:
-      SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       HOST: ${{ secrets.SERVER_HOST }}
       USERNAME: ${{ secrets.SERVER_USERNAME }}
       SSH_PORT: ${{ secrets.SERVER_SSH_PORT }}
@@ -194,7 +194,7 @@ jobs:
     #
     # このブロックは scripts/generate-workflow-env-block.sh で生成する（#51）。
     env:
-      SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       HOST: ${{ secrets.SERVER_HOST }}
       USERNAME: ${{ secrets.SERVER_USERNAME }}
       SSH_PORT: ${{ secrets.SERVER_SSH_PORT }}
@@ -249,17 +249,29 @@ jobs:
           HOST: ${{ env.HOST }}
           SSH_PORT: ${{ env.SSH_PORT }}
 
+      # **VPSのgate（/usr/local/sbin/app-deploy-gate。guchi-apps/vps#275・#301）へ渡す**（#607）。
+      # 鍵はこのアプリ専用で、VPSのauthorized_keysのcommand=がgateのアプリ名（ops-dashboard。置き場の
+      # /home/github-user/apps/ops-dashboard とpm2のプロセス名に一致する。リポジトリ名はstatus-hubへ
+      # 改めたが、置き場とプロセス名は旧名のまま。AGENTS.md冒頭）を固定する。任意のシェルコマンドは
+      # 実行できず、upload・env・deployの3語だけが通る。旧配布物の削除・展開・.env更新・
+      # npm ci --omit=dev・pm2の再起動・稼働版の照合（/api/app-version の sha）はgate側が行う。
+      # Prismaを持たないため、マイグレーションの手順は無い（MIGRATE_DATABASE_URLも送らない）。
       - name: Upload archive
-        run: scp -P "${SSH_PORT}" deploy.tar.gz "${USERNAME}@${HOST}:${TARGET_DIR}/deploy.tar.gz"
+        run: ssh -p "${SSH_PORT}" "${USERNAME}@${HOST}" upload < deploy.tar.gz
         env:
           HOST: ${{ env.HOST }}
           USERNAME: ${{ env.USERNAME }}
           SSH_PORT: ${{ env.SSH_PORT }}
-          TARGET_DIR: ${{ env.TARGET_DIR }}
 
-      - name: Deploy and restart
-        uses: appleboy/ssh-action@v1
+      - name: Send environment variables
         env:
+          HOST: ${{ env.HOST }}
+          USERNAME: ${{ env.USERNAME }}
+          SSH_PORT: ${{ env.SSH_PORT }}
+          # 稼働している版の照合に使う（#607。guchi-apps/car-care#257 と同じ形）。gateが.envの
+          # APP_COMMIT_SHAと稼働中の /api/app-version の sha を照合する（guchi-apps/vps#298）。
+          # コミットの SHA は公開情報なのでそのまま渡してよい
+          APP_COMMIT_SHA: ${{ github.sha }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           ALLOWED_EMAILS: ${{ env.ALLOWED_EMAILS }}
@@ -269,6 +281,7 @@ jobs:
           UPTIMEKUMA_USERNAME: ${{ env.UPTIMEKUMA_USERNAME }}
           UPTIMEKUMA_PASSWORD: ${{ env.UPTIMEKUMA_PASSWORD }}
           UPTIMEKUMA_ADMIN_TOKEN: ${{ env.UPTIMEKUMA_ADMIN_TOKEN }}
+          HOST_STATS_TOKEN: ${{ env.HOST_STATS_TOKEN }}
           SIGNALY_LOGIN_WEBHOOK_URL: ${{ env.SIGNALY_LOGIN_WEBHOOK_URL }}
           SIGNALY_ALERT_WEBHOOK_URL: ${{ env.SIGNALY_ALERT_WEBHOOK_URL }}
           ANTHROPIC_OAUTH_REFRESH_TOKEN: ${{ env.ANTHROPIC_OAUTH_REFRESH_TOKEN }}
@@ -289,110 +302,56 @@ jobs:
           AI_APP_USAGE_SOURCES_WRITE_TOKEN: ${{ secrets.AI_APP_USAGE_SOURCES_WRITE_TOKEN }}
           WEB_PUSH_VAPID_PUBLIC_KEY: ${{ env.WEB_PUSH_VAPID_PUBLIC_KEY }}
           WEB_PUSH_VAPID_PRIVATE_KEY: ${{ env.WEB_PUSH_VAPID_PRIVATE_KEY }}
-          TARGET_DIR: ${{ env.TARGET_DIR }}
-        with:
-          host: ${{ env.HOST }}
-          username: ${{ env.USERNAME }}
-          key: ${{ env.SSH_PRIVATE_KEY }}
-          port: ${{ env.SSH_PORT }}
-          envs: NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,ALLOWED_EMAILS,UPTIMEROBOT_READ_ONLY_KEY,UPTIMEKUMA_BASE_URL,UPTIMEKUMA_DASHBOARD_SLUG,UPTIMEKUMA_USERNAME,UPTIMEKUMA_PASSWORD,UPTIMEKUMA_ADMIN_TOKEN,HOST_STATS_TOKEN,SIGNALY_LOGIN_WEBHOOK_URL,SIGNALY_ALERT_WEBHOOK_URL,ANTHROPIC_OAUTH_REFRESH_TOKEN,OPENAI_CHATGPT_REFRESH_TOKEN,OPENAI_CHATGPT_ACCOUNT_ID,GH_USAGE_TOKEN,GH_USAGE_ORG,OP_SERVICE_ACCOUNT_TOKEN,WIDGET_TOKEN,OPS_API_TOKEN,AIDE_STATUS_TOKEN,SHARED_TOKEN_API_SECRET,SHARED_TOKEN_WRITE_SECRET,ISSUE_DECK_URL,TYPESAFE_USAGE_URL,TYPESAFE_USAGE_TOKEN,AI_APP_USAGE_SOURCES_WRITE_TOKEN,WEB_PUSH_VAPID_PUBLIC_KEY,WEB_PUSH_VAPID_PRIVATE_KEY,TARGET_DIR
-          script: |
-            set -euo pipefail
-            cd "${TARGET_DIR}"
-
+        run: |
+          set -euo pipefail
+          # 従来 .env へ書いていた値を1つも落とさない（StatusHubは他アプリのログイン許可を判定する
+          # 共通アクセス設定を持つため、値の欠落が全アプリのログインに響く）。
+          # 未登録のsecretは空文字として届き、従来の `${VAR:-}` と同じく空の値として書かれる。
+          names=(
+            NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ALLOWED_EMAILS
+            UPTIMEROBOT_READ_ONLY_KEY UPTIMEKUMA_BASE_URL UPTIMEKUMA_DASHBOARD_SLUG UPTIMEKUMA_USERNAME
+            UPTIMEKUMA_PASSWORD UPTIMEKUMA_ADMIN_TOKEN HOST_STATS_TOKEN SIGNALY_LOGIN_WEBHOOK_URL
+            SIGNALY_ALERT_WEBHOOK_URL ANTHROPIC_OAUTH_REFRESH_TOKEN OPENAI_CHATGPT_REFRESH_TOKEN
+            OPENAI_CHATGPT_ACCOUNT_ID GH_USAGE_TOKEN GH_USAGE_ORG OP_SERVICE_ACCOUNT_TOKEN WIDGET_TOKEN
+            OPS_API_TOKEN AIDE_STATUS_TOKEN SHARED_TOKEN_API_SECRET SHARED_TOKEN_WRITE_SECRET ISSUE_DECK_URL
+            TYPESAFE_USAGE_URL TYPESAFE_USAGE_TOKEN AI_APP_USAGE_SOURCES_WRITE_TOKEN
+            WEB_PUSH_VAPID_PUBLIC_KEY WEB_PUSH_VAPID_PRIVATE_KEY
+          )
+          # 空のまま書くと照合できないデプロイになるため、ここで止める
+          if [ -z "${APP_COMMIT_SHA:-}" ]; then
+            echo "::error::APP_COMMIT_SHA is empty."
+            exit 1
+          fi
+          # gateは標準入力を1行1変数（KEY=VALUE）で受けるため、改行を含む値は送れない
+          for name in "${names[@]}"; do
+            case "${!name:-}" in
+              *$'\n'*) echo "::error::${name} が改行を含むためgateへ送れません"; exit 1 ;;
+            esac
+          done
+          {
             # 待受ポートはシークレットではなく設定値として平文で持つ
             # （guchi-apps/docs の standards/ports.md「ポート番号は 1Password で管理しない」。#111）。
-            PORT=3110
-
-            echo "Cleaning up old release files..."
-            rm -rf .next package.json package-lock.json public deploy scripts next.config.mjs next.config.ts
-
-            echo "Extracting archive..."
-            tar -xzf deploy.tar.gz
-            rm deploy.tar.gz
-
-            update_env() {
-              bash scripts/update-env-file.sh .env "$1" "$2"
-            }
-
-            echo "Updating .env..."
-            update_env NODE_ENV production
+            printf '%s\n' "NODE_ENV=production" "PORT=3110"
             # 共通アクセス設定のDBが本番であることを示す（秘密ではないためリテラルで渡す。#489）。
             # 未設定だと development 扱いになり、本番DBと食い違って全拒否になる
-            update_env ACCESS_ENVIRONMENT production
-            update_env PORT "$PORT"
-            update_env NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
-            update_env NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
-            update_env ALLOWED_EMAILS "$ALLOWED_EMAILS"
-            update_env UPTIMEROBOT_READ_ONLY_KEY "$UPTIMEROBOT_READ_ONLY_KEY"
-            update_env UPTIMEKUMA_BASE_URL "$UPTIMEKUMA_BASE_URL"
-            update_env UPTIMEKUMA_DASHBOARD_SLUG "$UPTIMEKUMA_DASHBOARD_SLUG"
-            update_env UPTIMEKUMA_USERNAME "$UPTIMEKUMA_USERNAME"
-            update_env UPTIMEKUMA_PASSWORD "$UPTIMEKUMA_PASSWORD"
-            update_env UPTIMEKUMA_ADMIN_TOKEN "$UPTIMEKUMA_ADMIN_TOKEN"
-            update_env HOST_STATS_TOKEN "$HOST_STATS_TOKEN"
+            printf '%s\n' "ACCESS_ENVIRONMENT=production"
             # 画面に並べる順番（VPS・サブPC・Mac Mini・Pi Zero W の順、それ以外は識別子順）。秘密ではないため直接指定する
-            update_env HOST_STATS_ORDER "vps,subpc,macmini,pi0w"
-            update_env SIGNALY_LOGIN_WEBHOOK_URL "$SIGNALY_LOGIN_WEBHOOK_URL"
-            # secret未登録でもデプロイを落とさない（未設定なら通知しないだけ。#75）。
-            # このスクリプトは set -u の下で動くため、素の $VAR だと未登録の間は必ず失敗する
-            update_env SIGNALY_ALERT_WEBHOOK_URL "${SIGNALY_ALERT_WEBHOOK_URL:-}"
-            update_env ANTHROPIC_OAUTH_REFRESH_TOKEN "$ANTHROPIC_OAUTH_REFRESH_TOKEN"
-            update_env OPENAI_CHATGPT_REFRESH_TOKEN "$OPENAI_CHATGPT_REFRESH_TOKEN"
-            update_env OPENAI_CHATGPT_ACCOUNT_ID "$OPENAI_CHATGPT_ACCOUNT_ID"
-            update_env GH_USAGE_TOKEN "$GH_USAGE_TOKEN"
-            update_env GH_USAGE_ORG "$GH_USAGE_ORG"
-            update_env OP_SERVICE_ACCOUNT_TOKEN "$OP_SERVICE_ACCOUNT_TOKEN"
-            update_env WIDGET_TOKEN "$WIDGET_TOKEN"
-            update_env OPS_API_TOKEN "$OPS_API_TOKEN"
-            # secret未登録でもデプロイを落とさない（未設定ならAIDEタブを出さないだけ。#237）
-            update_env AIDE_STATUS_TOKEN "${AIDE_STATUS_TOKEN:-}"
-            # secret未登録でもデプロイを落とさない（未設定ならAIDE_STATUS_TOKENへフォールバックするだけ。#444）
-            update_env SHARED_TOKEN_API_SECRET "${SHARED_TOKEN_API_SECRET:-}"
-            update_env SHARED_TOKEN_WRITE_SECRET "${SHARED_TOKEN_WRITE_SECRET:-}"
-            update_env ISSUE_DECK_URL "${ISSUE_DECK_URL:-}"
-            # secret未登録でもデプロイを落とさない（未設定ならTypeSafe AIカードを出さないだけ。#302）
-            update_env TYPESAFE_USAGE_URL "${TYPESAFE_USAGE_URL:-}"
-            update_env TYPESAFE_USAGE_TOKEN "${TYPESAFE_USAGE_TOKEN:-}"
-            # secret未登録でもデプロイを落とさない（未設定なら画面からの編集だけ使える。#431）
-            update_env AI_APP_USAGE_SOURCES_WRITE_TOKEN "${AI_APP_USAGE_SOURCES_WRITE_TOKEN:-}"
-            # secret未登録でもデプロイを落とさない（未設定なら通知のベルを出さないだけ。#263）
-            update_env WEB_PUSH_VAPID_PUBLIC_KEY "${WEB_PUSH_VAPID_PUBLIC_KEY:-}"
-            update_env WEB_PUSH_VAPID_PRIVATE_KEY "${WEB_PUSH_VAPID_PRIVATE_KEY:-}"
-
-            # 削除した機能のキーは、update_env で書かれなくなっても既存の .env に残り続ける。
-            # 不要な権限を持つトークンを本番に残さないため明示的に消す（dotの作業状況を削除した #589 の残り）
-            echo "Removing obsolete .env keys..."
-            bash scripts/remove-env-key.sh .env AIDE_WORK_REPORTS_TOKEN
-
-            echo "Installing production dependencies..."
-            npm install --omit=dev --no-audit --prefer-offline
-
-            echo "Restarting PM2..."
-            if command -v pm2 >/dev/null 2>&1; then
-              pm2 delete ops-dashboard 2>/dev/null || true
-              PORT="$PORT" pm2 start deploy/ecosystem.config.js --env production
-              pm2 save
-            else
-              echo "pm2 is required on the server. Install: npm install -g pm2"
-              exit 1
-            fi
-
-            echo "Health check..."
-            # Next.js は起動完了までに数秒かかる。1回だけの curl では起動を待ちきれず、
-            # アプリが正常に立ち上がっていても deploy ジョブが失敗する（guchi-apps/docs#29）。
-            for i in $(seq 1 30); do
-              if curl -fsS -o /dev/null "http://127.0.0.1:${PORT}/login"; then
-                echo "Deployment successful."
-                exit 0
-              fi
-              sleep 2
+            printf '%s\n' "HOST_STATS_ORDER=vps,subpc,macmini,pi0w"
+            printf '%s\n' "APP_COMMIT_SHA=${APP_COMMIT_SHA}"
+            for name in "${names[@]}"; do
+              printf '%s=%s\n' "$name" "${!name:-}"
             done
+          } | ssh -p "${SSH_PORT}" "${USERNAME}@${HOST}" env
+          # 従来の SSH 先スクリプトにあった `bash scripts/remove-env-key.sh .env AIDE_WORK_REPORTS_TOKEN`
+          # （#589 の後片付け）はgateに移せない（gateは .env のキーを消す手段を持たない）。main へは
+          # 既に出ており本番の .env から消えている前提で落とした。今後キーを消すときは手作業になる
 
-            echo "Health check failed after 60s."
-            pm2 describe ops-dashboard || true
-            pm2 logs ops-dashboard --lines 50 --nostream || true
-            exit 1
+      - name: Deploy and restart
+        run: ssh -p "${SSH_PORT}" "${USERNAME}@${HOST}" deploy
+        env:
+          HOST: ${{ env.HOST }}
+          USERNAME: ${{ env.USERNAME }}
+          SSH_PORT: ${{ env.SSH_PORT }}
 
       - name: Signaly に通知
         # 通知のためだけにジョブを分けない（notify-releaseと同じ理由）。deployが動かなかった
