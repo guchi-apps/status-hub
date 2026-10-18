@@ -56,7 +56,7 @@ Node標準の `node:test` で `src/**/*.test.ts` を実行する（#279）。**�
 
 ### 開発サーバーでの画面確認
 
-**`/login` 配下以外の全ページはログイン必須**（`src/proxy.ts` の `PUBLIC_PATH_PREFIXES`）で、
+**`/login` 配下以外の全ページはログイン必須**（`src/lib/public-paths.ts` の `PUBLIC_PATH_PREFIXES`。`src/proxy.ts` が参照）で、
 Supabaseのセッションが無いと `/login` へリダイレクトされる。`.env.local` が無いworktree
 （GUIが無くOAuthを完了できない環境を含む）では、素の `curl` で画面を確認できない。
 
