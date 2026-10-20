@@ -48,12 +48,13 @@ test("設定が無ければ取得せず unconfigured", async () => {
 
 test("成功・HTTPエラー・形式不正を区別する", async (t) => {
     process.env.ISSUE_DECK_URL = "https://issuedeck.example"
-    process.env.OPS_API_TOKEN = "token"
-    delete process.env.SHARED_TOKEN_API_SECRET
+    process.env.SHARED_TOKEN_API_SECRET = "api-secret"
+    delete process.env.OPS_API_TOKEN
 
     const responses = [Response.json(VALID), new Response(null, { status: 404 }), Response.json({ foo: 1 })]
     const authHeaders: (string | null)[] = []
-    t.mock.method(globalThis, "fetch", (_input: unknown, init?: RequestInit) => {
+    t.mock.method(globalThis, "fetch", (input: unknown, init?: RequestInit) => {
+        if (String(input).includes("/api/shared-tokens")) return Promise.resolve(Response.json({ value: "token" }))
         authHeaders.push(new Headers(init?.headers).get("authorization"))
         return Promise.resolve(responses.shift() as Response)
     })
