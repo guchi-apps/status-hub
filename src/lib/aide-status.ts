@@ -51,14 +51,6 @@ type AideConfigResult = { config: AideConfig } | { config: null; reason: "unconf
 /** issue-deckの共有トークンAPIから取得したトークンをプロセス内に持つ（#444） */
 let sharedTokenCache: SharedTokenCacheEntry | null = null
 
-/**
- * issue-deckが未設定・取得に失敗したときのフォールバック（試行中の暫定措置。#444の範囲外で
- * 削除予定）。使われるとしても、AIDE側の AIDE_STATUS_SECRET と同じ値である必要がある
- */
-function legacyToken(): string | undefined {
-    return process.env.AIDE_STATUS_TOKEN
-}
-
 /** issue-deckの共有トークンAPIを使える設定が揃っているか（値を取得できるかどうかとは別） */
 function isSharedTokenApiConfigured(): boolean {
     return Boolean(process.env.ISSUE_DECK_URL && process.env.SHARED_TOKEN_API_SECRET)
@@ -69,7 +61,7 @@ async function readAideConfig(): Promise<AideConfigResult> {
     const { value, cache, failed } = await resolveSharedToken("AIDE_STATUS_TOKEN", "ops-dashboard", sharedTokenCache)
     sharedTokenCache = cache
 
-    const token = value ?? legacyToken()
+    const token = value
     if (!token) return { config: null, reason: failed ? "unavailable" : "unconfigured" }
 
     const baseUrl = process.env.AIDE_BASE_URL || DEFAULT_BASE_URL
@@ -102,11 +94,11 @@ async function requestAideWithRefresh(
 
 /**
  * 未設定の環境（worktree・開発機）ではタブごと出さない。ページ側で判定に使う同期関数のため
- * 実際には取得を試みず、取得できる見込み（フォールバックenvか共有トークンAPIの設定）が
+ * 実際には取得を試みず、取得できる見込み（共有トークンAPIの設定）が
  * あるかだけで判定する
  */
 export function isAideStatusConfigured(): boolean {
-    return Boolean(legacyToken()) || isSharedTokenApiConfigured()
+    return isSharedTokenApiConfigured()
 }
 
 class AideHttpError extends Error {
@@ -192,7 +184,7 @@ export async function getAideStatusSnapshot(): Promise<AideStatusSnapshot> {
         const unavailable = "reason" in rest && rest.reason === "unavailable"
         return {
             status: unavailable ? "error" : "unconfigured",
-            message: unavailable ? UNAVAILABLE_MESSAGE : "AIDE_STATUS_TOKEN が未設定です",
+            message: unavailable ? UNAVAILABLE_MESSAGE : "issue-deckの共有トークンAPIが未設定です",
             health: lastGood?.health ?? null,
             tools: lastGood?.tools ?? [],
             fetchedAt,
@@ -233,7 +225,7 @@ export async function runAideStatusChecks(): Promise<AideProbeResponse> {
         if ("reason" in rest && rest.reason === "unavailable") {
             return { status: "error", message: UNAVAILABLE_MESSAGE, results: [] }
         }
-        return { status: "unconfigured", message: "AIDE_STATUS_TOKEN が未設定です", results: [] }
+        return { status: "unconfigured", message: "issue-deckの共有トークンAPIが未設定です", results: [] }
     }
 
     try {

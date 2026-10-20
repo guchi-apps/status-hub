@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { afterEach, beforeEach, describe, it, mock } from "node:test"
 import { readOpsApiToken, resetOpsApiTokenCache } from "@/lib/ops-api-token"
 
-const ENV_KEYS = ["ISSUE_DECK_URL", "SHARED_TOKEN_API_SECRET", "OPS_API_TOKEN", "TYPESAFE_USAGE_TOKEN"] as const
+const ENV_KEYS = ["ISSUE_DECK_URL", "SHARED_TOKEN_API_SECRET", "OPS_API_TOKEN"] as const
 
 let saved: Array<readonly [string, string | undefined]> = []
 
@@ -53,29 +53,23 @@ describe("readOpsApiToken", () => {
 
         await readOpsApiToken()
         await readOpsApiToken()
-        assert.equal(await readOpsApiToken("TYPESAFE_USAGE_TOKEN"), "shared-token")
+        assert.equal(await readOpsApiToken(), "shared-token")
         assert.equal(fetchMock.mock.calls.length, 1)
     })
 
-    it("取得に失敗したら指定した環境変数へフォールバックする", async () => {
-        setEnv({ ...API_ENV, OPS_API_TOKEN: "env-token", TYPESAFE_USAGE_TOKEN: "typesafe-env-token" })
+    it("取得に失敗しても環境変数へはフォールバックしない", async () => {
+        setEnv({ ...API_ENV, OPS_API_TOKEN: "env-token" })
         stubFetch(() => new Response("error", { status: 500 }))
         mock.method(console, "error", () => {})
 
-        assert.equal(await readOpsApiToken(), "env-token")
-        assert.equal(await readOpsApiToken("TYPESAFE_USAGE_TOKEN"), "typesafe-env-token")
+        assert.equal(await readOpsApiToken(), undefined)
     })
 
-    it("共有トークンAPIが未設定なら、取得を試みず環境変数を返す", async () => {
-        setEnv({ OPS_API_TOKEN: " env-token " })
+    it("共有トークンAPIが未設定なら、取得を試みずundefinedを返す", async () => {
+        setEnv({ OPS_API_TOKEN: "env-token" })
         const fetchMock = stubFetch(() => Response.json({ value: "unused" }))
 
-        assert.equal(await readOpsApiToken(), "env-token")
-        assert.equal(fetchMock.mock.calls.length, 0)
-    })
-
-    it("どちらも無ければundefinedを返す", async () => {
-        setEnv({})
         assert.equal(await readOpsApiToken(), undefined)
+        assert.equal(fetchMock.mock.calls.length, 0)
     })
 })
