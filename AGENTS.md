@@ -186,20 +186,18 @@ AIDEタブは `aide.gucchii.com/status` と同じ内容を、AIDEの `GET /api/s
   AIDEの `AIDE_READ_SECRET` も流用しない（残高のAPIまで読めてしまう）
 - **トークンの正は1Passwordではなくissue-deckの共有トークンAPI**（`src/lib/shared-token.ts`。#444）。
   `readAideConfig()`（`src/lib/aide-status.ts`）が起動のたびに`GET $ISSUE_DECK_URL/api/shared-tokens?name=AIDE_STATUS_TOKEN`
-  を叩き、結果をプロセス内に10分キャッシュする。取得に失敗したら直前の値を使い続け、キャッシュも無ければ
-  環境変数 `AIDE_STATUS_TOKEN` へフォールバックする（1Password複製の移行期のみの経路。移行後は
-  `ISSUE_DECK_URL`・`SHARED_TOKEN_API_SECRET`の2つだけが残る想定）。**`isAideStatusConfigured()`は
-  同期関数のまま**（タブを出すかの判定に使うため）で、実際に取得を試みず「フォールバックenvか
-  共有トークンAPIの設定が揃っているか」だけで判定している
+  を叩き、結果をプロセス内に10分キャッシュする。取得に失敗したら直前の値を使い続ける。
+  **環境変数 `AIDE_STATUS_TOKEN` へのフォールバックは撤去した**（#610。`.github/secrets-manifest.tsv`・`deploy.yml` からも配布を外した）。
+  **`isAideStatusConfigured()`は同期関数のまま**（タブを出すかの判定に使うため）で、実際に取得を試みず
+  「共有トークンAPIの設定（`ISSUE_DECK_URL`・`SHARED_TOKEN_API_SECRET`）が揃っているか」だけで判定している
 - **`OPS_API_TOKEN` も同じ共有トークンAPIから取る**（#448。`src/lib/ops-api-token.ts` の `readOpsApiToken()`）。
   受ける側（`requireSessionOrApiToken()`。セッションで通る場合は取得を待たない）・連携先へ送るBearer・TypeSafe使用量
-  （フォールバックは `TYPESAFE_USAGE_TOKEN`）の3か所でキャッシュを共有し、利用元は `ops-dashboard` で記録される。
-  取得できなければ環境変数へフォールバックするため、**フォールバックに黙って落ちていないかは
-  issue-deckの設定画面の利用元表示で確かめる**
+  の3か所でキャッシュを共有し、利用元は `ops-dashboard` で記録される。環境変数（`OPS_API_TOKEN`・別名の
+  `TYPESAFE_USAGE_TOKEN`）へのフォールバックは撤去した（#610）。**取得できているかは
+  issue-deckの設定画面の利用元表示で確かめる**。取得できないとトークン経路・TypeSafeカード・アプリ別AI利用の連携先への送信が止まる
 - 取得に失敗したときのステータスで原因を切り分ける。401はトークンのずれ、503はAIDE側の未設定、
   404はAIDEにAPIがまだ無い（デプロイ前）
-- `AIDE_STATUS_TOKEN`・`ISSUE_DECK_URL`+`SHARED_TOKEN_API_SECRET`のいずれも未設定ならタブもチップも
-  出ない。worktreeでそのまま動かしてよい
+- `ISSUE_DECK_URL`+`SHARED_TOKEN_API_SECRET`が未設定ならタブもチップも出ない。worktreeでそのまま動かしてよい
 - **「定期ジョブ」の行を押すと実行記録のモーダルが開く**（#387。`job-history-modal.tsx`）。ただしAIDEは
   実行記録をジョブごとに直近1件しか持たず、履歴（`jobs[].recentRuns`・新しい順・最大30件）を返すのは
   guchi-apps/aide#441の対応後。それまでは任意フィールドが届かず「実行記録がありません」の空状態になる。
@@ -276,7 +274,7 @@ AIDEタブは `aide.gucchii.com/status` と同じ内容を、AIDEの `GET /api/s
   設定へ足すだけでTypeSafeからの補完は止まる。両方を数えるとJevが二重になる
 - **`/api/ai-app-usage` は `src/proxy.ts` の除外に載せ、ルート側の `requireSessionOrApiToken()` で認証する。**
   AIDEなどサーバー間からも `OPS_API_TOKEN` で読めるようにするため。連携先へ送るBearerも同じ `OPS_API_TOKEN`
-  （TypeSafe連携の `TYPESAFE_USAGE_TOKEN` を同じ値で配っているのと同じ考え方）。URLは https かループバックに限る
+  （TypeSafe連携の `TYPESAFE_USAGE_TOKEN` を別名で配っていた時期と同じ考え方。#610で撤去）。URLは https かループバックに限る
 - **行の並びは `globals.css` の `.ai-app-row`（grid-template-areas）で3通りに切り替えている。** 列を足すときは
   3つのブレークポイントすべての `grid-template-areas` を合わせる
 - **画面確認は2通り。** 描画は `AiAppUsageView`（取得から切り離してある）に作り物の `AiAppUsageSnapshot` を

@@ -82,8 +82,8 @@ function unconfigured(message: string): ProviderFetchResult {
 
 async function fetchTypeSafeUsage(): Promise<ProviderFetchResult> {
     const url = process.env.TYPESAFE_USAGE_URL?.trim()
-    const token = await readOpsApiToken("TYPESAFE_USAGE_TOKEN")
-    if (!url || !token) return unconfigured("TYPESAFE_USAGE_URL / TYPESAFE_USAGE_TOKEN が未設定です")
+    const token = await readOpsApiToken()
+    if (!url || !token) return unconfigured("TYPESAFE_USAGE_URL が未設定、または issue-deck から OPS_API_TOKEN を取得できません")
 
     try {
         const response = await fetchWithTimeout(url, {

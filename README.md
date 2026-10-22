@@ -491,7 +491,7 @@ Claude / ChatGPT のトークン使用状況と課金プランをダッシュボ
 
 プラン名はどちらもAPIから自動取得するため設定不要。`CLAUDE_PLAN_NAME` / `CHATGPT_PLAN_NAME` を設定した場合のみ、表示名の上書きとして使われる。
 
-TypeSafeの公開APIはアカウントの残高・無料枠を返さず、POST /v1/systemone の応答にその呼び出しのトークン数だけを返す。そのため、TypeSafeを呼ぶアプリが集計したAPIを `TYPESAFE_USAGE_URL` に、同APIのBearerトークンを `TYPESAFE_USAGE_TOKEN` に設定する。両方未設定ならカードは表示しない。表示する金額は入力単価 `$0.042 / 100万トークン` を使った概算で、請求額そのものではない。
+TypeSafeの公開APIはアカウントの残高・無料枠を返さず、POST /v1/systemone の応答にその呼び出しのトークン数だけを返す。そのため、TypeSafeを呼ぶアプリが集計したAPIを `TYPESAFE_USAGE_URL` に、同APIのBearerには issue-deck の共有トークン `OPS_API_TOKEN` を使う（環境変数では持たない。#610）。`TYPESAFE_USAGE_URL` が未設定、またはトークンを取得できなければカードは表示しない。表示する金額は入力単価 `$0.042 / 100万トークン` を使った概算で、請求額そのものではない。
 
 **Jevのクレジット枠**（[#426](https://github.com/guchi-apps/status-hub/issues/426)）: 購入したクレジットを消費する形をClaudeのクレジット枠と同じ見た目で出す。TypeSafeにも連携先の集計APIにも残高・購入額を返す項目は無いため、Claudeと同じく画面の「購入・残高を記録」から購入と補正残高を登録し（`.data/typesafe-credit-ledger.json`。`TYPESAFE_CREDIT_LEDGER_PATH` で変更可）、そこから消費を差し引いて残高を推定する。消費額は連携先の応答に**任意の `totalInputTokens`（集計開始からの累計入力トークン）** が含まれるときだけ積む（直近24時間・7日間のローリング値からは累計を作れないため）。含まれない間は「使用額は累計待ち」と表示し、残高は補正値＋その後の購入のままになる。
 
@@ -738,26 +738,14 @@ Content-Type: application/json
 
 ### 設定
 
-`OPS_API_TOKEN` に32文字以上のランダム文字列を設定する。本番では1Passwordの `apps/ops-dashboard` アイテムに `ops-api-token` フィールドを追加し、`scripts/sync-github-secrets.sh` でGitHubのsecretへ同期する。
+`OPS_API_TOKEN` は環境変数では持たず、issue-deck の共有トークンAPIから実行時に取得する（`ISSUE_DECK_URL`・`SHARED_TOKEN_API_SECRET` が要る。#448・#610）。取得できなければトークン経路は無効になり、セッション必須の状態に戻る。
 
 ### 本番で401になったときの確認
 
-VPS上で `.env` の値を使って直接叩く。**`.env` の値はダブルクォートで囲まれている**ため、
-取り出すときにクォートを外すこと（[issue #102](https://github.com/guchi-apps/status-hub/issues/102)）。
-
-```bash
-cd <デプロイ先ディレクトリ>
-TOKEN=$(grep -m1 '^OPS_API_TOKEN=' .env | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//')
-curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3110/api/host-stats
-```
-
-`sed` を省いて `cut -d= -f2-` だけで取り出すと、`"` ごと送ってしまい**必ず401になる**。
-Next.js 側はクォートを外して読むため、サーバーが持っている値は正しいのに確認コマンドだけがずれる、
-という切り分けにくい状態になる。
-
-200が返ればトークン経路は動いている。401が続く場合は、`.env` の値と呼び出し元
-（AIDEのMCPサーバー）が使っている値が同じかを確認する。**`.env` を書き換えたらプロセスの
-再起動（`pm2 restart ops-dashboard`）が必要**で、`.env` は起動時にしか読まれない。
+`OPS_API_TOKEN` は `.env` に無いため、VPS上の `.env` から取り出して試すことはできない。issue-deck の設定画面で
+`OPS_API_TOKEN` の利用元に `ops-dashboard` が出ているか（＝取得できているか）と、呼び出し元
+（AIDEのMCPサーバー）が同じ共有トークンを使っているかを確かめる。ローテーション直後は最大10分、
+キャッシュした古い値が残る。
 
 ## GitHubの制限の表示
 
