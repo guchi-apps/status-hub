@@ -721,6 +721,7 @@ Authorization: Bearer <PI_PANEL_TOKEN>
 
 - `providers` は固定取得済みの旧 room-panel（`/api/ai-usage` の形を読む）向けの互換フィールド（#621）。
   `{id, status, windows: [{label, windowSeconds, usedPercent, resetsAt}]}` で、値のある枠だけを載せる。
+  取得失敗で保持値を使った提供元は、旧クライアントが `stale` を読まないため `status: "unavailable"`・`windows: []` にする（LCDは取得不可表示になる）。
   新しいクライアントは `quotas` を読む
 
 - **認証は `PI_PANEL_TOKEN` だけ。** ログインセッションも `OPS_API_TOKEN` も通さない。未設定なら常に401。
