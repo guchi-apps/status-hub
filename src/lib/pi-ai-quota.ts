@@ -72,6 +72,7 @@ export function toPiAiQuota(snapshot: AiUsageSnapshot, store: HeldWindows = held
     }
 
     let stale = false
+    const staleProviders = new Set<AiProviderId>()
     const quotas = SLOTS.map((slot): PiQuota => {
         const provider = snapshot.providers.find((entry) => entry.id === slot.provider)
         const usedFresh = provider?.status === "ok"
@@ -79,25 +80,33 @@ export function toPiAiQuota(snapshot: AiUsageSnapshot, store: HeldWindows = held
         const window = windows ? findWindow(windows, slot) : undefined
 
         if (!window) return { id: slot.id, label: slot.label, remaining_percent: null, resets_at: null }
-        if (!usedFresh) stale = true
+        if (!usedFresh) {
+            stale = true
+            staleProviders.add(slot.provider)
+        }
 
         const remaining = Math.min(100, Math.max(0, Math.round(100 - window.usedPercent)))
         return { id: slot.id, label: slot.label, remaining_percent: remaining, resets_at: window.resetsAt }
     })
 
-    return { quotas, providers: toCompatProviders(quotas), fetched_at: snapshot.fetchedAt, stale }
+    return { quotas, providers: toCompatProviders(quotas, staleProviders), fetched_at: snapshot.fetchedAt, stale }
 }
 
 /**
  * `quotas` から旧 room-panel が読む `providers` を組み立てる。値のある枠だけを載せ、
  * 取れなかった枠（null）は載せない（旧クライアントは枠が無ければ「不明」として扱う）。
  * 枠の判別は旧クライアントが `windowSeconds` で行う。
+ *
+ * 取得失敗で保持値を使った提供元は、値を載せず `unavailable` にする（#621）。旧クライアントは
+ * トップレベルの `stale` を読まず、`status: "ok"` の値を最新として表示してしまうため、
+ * `/api/ai-usage` が失敗時に返すのと同じく「取得不可」へ導く。
  */
-function toCompatProviders(quotas: PiQuota[]): PiCompatProvider[] {
+function toCompatProviders(quotas: PiQuota[], staleProviders: Set<AiProviderId>): PiCompatProvider[] {
     const providers = new Map<AiProviderId, PiCompatProvider>()
     for (const slot of SLOTS) {
         const provider = providers.get(slot.provider) ?? { id: slot.provider, status: "unavailable" as const, windows: [] }
         providers.set(slot.provider, provider)
+        if (staleProviders.has(slot.provider)) continue
         const quota = quotas.find((entry) => entry.id === slot.id)
         if (!quota || quota.remaining_percent === null) continue
         provider.status = "ok"

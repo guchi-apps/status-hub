@@ -51,6 +51,23 @@ describe("toPiAiQuota", () => {
         assert.equal(chatgpt?.windows[0].usedPercent, 3)
     })
 
+    it("取得失敗で保持値を使った提供元は、互換 providers では値を載せず unavailable にする（#621）", () => {
+        const store: HeldWindows = new Map()
+        toPiAiQuota(makeSnapshot([makeProvider("claude", claudeWindows()), makeProvider("chatgpt", chatGptWindows())], NOW), store)
+        const failed = makeProvider("claude", [])
+        failed.status = "error"
+        const result = toPiAiQuota(makeSnapshot([failed, makeProvider("chatgpt", chatGptWindows())], NOW), store)
+
+        assert.equal(result.stale, true)
+        assert.equal(quotaOf(result, "claude_5h").remaining_percent, 75)
+        const claude = result.providers.find((entry) => entry.id === "claude")
+        assert.equal(claude?.status, "unavailable")
+        assert.deepEqual(claude?.windows, [])
+        const chatgpt = result.providers.find((entry) => entry.id === "chatgpt")
+        assert.equal(chatgpt?.status, "ok")
+        assert.equal(chatgpt?.windows.length, 1)
+    })
+
     it("枠が取れない提供元は unavailable で空の windows にする", () => {
         const result = toPiAiQuota(makeSnapshot([], NOW), new Map())
         assert.ok(result.providers.every((entry) => entry.status === "unavailable" && entry.windows.length === 0))
