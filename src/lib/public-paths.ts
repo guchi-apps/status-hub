@@ -6,6 +6,8 @@
 // /api/access/v1 は各アプリのサーバーが共通アクセス設定を引く契約API（#489）。ログイン画面を
 // 通れないため素通りさせ、ルート側でアプリ別トークンを照合する。管理用の /api/access/admin は
 // 含めず、ここを通ったうえで管理者のセッションを求める。
+// /api/pi-ai-quota はラズパイのroom-panelが残り割合を読む専用API（#618）。ログイン画面を通れないため
+// 素通りさせ、ルート側で PI_PANEL_TOKEN だけを照合する（セッション・OPS_API_TOKENでは通さない）。
 // /api/app-version は deploy.yml のヘルスチェックが 127.0.0.1 から未ログインで叩き、稼働中の
 // コミットSHAを照合する（#607）。返すのは版とSHAだけで、どちらも公開情報。
 // 残りの読み取りAPIは、同一VPS上のAIDE（MCPサーバー）から参照するために素通りさせ、ルート側の
@@ -24,6 +26,7 @@ export const PUBLIC_PATH_PREFIXES = [
   "/api/uptime-kuma",
   "/api/ai-usage",
   "/api/ai-app-usage",
+  "/api/pi-ai-quota",
   "/api/github-usage",
   "/api/onepassword-usage",
 ];

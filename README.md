@@ -697,6 +697,35 @@ Authorization: Bearer <OPS_API_TOKEN>
   `OPS_API_TOKEN` のどちらかを求める。画面からの利用はこれまでどおりセッションで通り、挙動は変わらない。
   `OPS_API_TOKEN` が未設定ならトークン経路は無効になり、セッション必須だった従来の状態に戻る
 
+### Pi向けのAI利用枠API（`GET /api/pi-ai-quota`）
+
+ラズパイの room-panel（LCD表示。guchi-apps/pi0w#42）が、Claude・Codexの残り割合を定期取得するための読み取りAPI（#618）。
+
+```
+GET /api/pi-ai-quota
+Authorization: Bearer <PI_PANEL_TOKEN>
+```
+
+```json
+{
+  "quotas": [
+    {"id": "claude_5h", "label": "Claude 5h", "remaining_percent": 75, "resets_at": "2026-10-25T10:30:00.000Z"},
+    {"id": "claude_7d", "label": "Claude 7d", "remaining_percent": 57, "resets_at": "2026-10-26T01:00:00.000Z"},
+    {"id": "codex_7d",  "label": "Codex 7d",  "remaining_percent": 97, "resets_at": "2026-11-01T06:11:30.000Z"}
+  ],
+  "fetched_at": "2026-10-25T07:41:47.000Z",
+  "stale": false
+}
+```
+
+- **認証は `PI_PANEL_TOKEN` だけ。** ログインセッションも `OPS_API_TOKEN` も通さない。未設定なら常に401。
+  実値は1Passwordの `op://apps/ops-dashboard/pi-panel-token` で管理し、`.env` には項目名だけを書く
+- 内容は `/api/ai-usage` と同じ提供元ごとのキャッシュから作るので、提供元への問い合わせは増えない。
+  金額・クレジット・履歴・プラン名は返さない
+- 取得できなかった枠は外さず `remaining_percent: null`（`resets_at` も null）。提供元の取得に失敗した回は、
+  その提供元の最後の成功値で埋めて `stale: true` にする（保持はプロセス内だけで、再起動すると消える）
+- `fetched_at` は提供元の取得時刻のうち最も古いもの。Claudeの7dは全体の週間枠（Opus・Sonnet別は含めない）
+
 ### アプリ別AI利用の連携先設定API
 
 `/api/ai-app-usage/sources` は、ログイン済み画面とAIエージェントが同じ連携先一覧を操作するためのAPIである。
