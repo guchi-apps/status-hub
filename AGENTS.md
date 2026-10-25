@@ -443,6 +443,16 @@ ChatGPTの5時間枠は対象外（Issueの指定）。
   `findModel` の前方一致は使わない（`claude-sonnet-5-5` が `claude-sonnet-5` に当たる。#362）
 - **取得失敗を「変更なし」にしない。** 失敗した提供元は前回の候補を持ち越す。通知の宛先は `sendPushWhere`（`sendPushToAll` を使わない）
 
+## Pi向けのAI利用枠API（#618）
+
+`GET /api/pi-ai-quota`（`src/app/api/pi-ai-quota/route.ts`）は、ラズパイの room-panel 専用の読み取りAPI。守ること:
+
+- **認証は `PI_PANEL_TOKEN` の照合だけ。** `requireSessionOrApiToken()` に替えない（Piに配ったトークンで `OPS_API_TOKEN` 経路の
+  他のAPIを読ませないための専用トークン）。`/api/pi-ai-quota` は `PUBLIC_PATH_PREFIXES` に載せてあり、保護はルート側だけが担う
+- 応答は残り割合とリセット時刻だけ。金額・クレジット・履歴・プラン名を足さない。内容は `getAiUsageSnapshot()` のキャッシュから
+  作り、このAPIのために提供元へ取りにいかない
+- 枠は `windowSeconds` と `note` で拾う（`label` だとClaudeの週間枠3本を取り違える）。取れなかった枠は外さず `null`
+
 ## 週間枠の「1日ごとの区切り」
 
 週間枠のバーに立つ細い点線は、**その日の終わりまでの累計使用率**の位置にあり、線と線の間隔が
