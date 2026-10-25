@@ -8,8 +8,27 @@ export interface PiQuota {
     resets_at: string | null
 }
 
+/**
+ * 固定取得済みの room-panel（pi0w の ai_quota_client.py）が読む `/api/ai-usage` 互換の形（#621）。
+ * `providers[].windows[].usedPercent` だけを読むため、必要最小限の項目に絞る。
+ */
+export interface PiCompatWindow {
+    label: string
+    windowSeconds: number
+    usedPercent: number
+    resetsAt: string | null
+}
+
+export interface PiCompatProvider {
+    id: AiProviderId
+    status: "ok" | "unavailable"
+    windows: PiCompatWindow[]
+}
+
 export interface PiAiQuotaResponse {
     quotas: PiQuota[]
+    /** 旧クライアント向けの互換フィールド。新しいクライアントは `quotas` を読む */
+    providers: PiCompatProvider[]
     fetched_at: string
     stale: boolean
 }
@@ -66,5 +85,28 @@ export function toPiAiQuota(snapshot: AiUsageSnapshot, store: HeldWindows = held
         return { id: slot.id, label: slot.label, remaining_percent: remaining, resets_at: window.resetsAt }
     })
 
-    return { quotas, fetched_at: snapshot.fetchedAt, stale }
+    return { quotas, providers: toCompatProviders(quotas), fetched_at: snapshot.fetchedAt, stale }
+}
+
+/**
+ * `quotas` から旧 room-panel が読む `providers` を組み立てる。値のある枠だけを載せ、
+ * 取れなかった枠（null）は載せない（旧クライアントは枠が無ければ「不明」として扱う）。
+ * 枠の判別は旧クライアントが `windowSeconds` で行う。
+ */
+function toCompatProviders(quotas: PiQuota[]): PiCompatProvider[] {
+    const providers = new Map<AiProviderId, PiCompatProvider>()
+    for (const slot of SLOTS) {
+        const provider = providers.get(slot.provider) ?? { id: slot.provider, status: "unavailable" as const, windows: [] }
+        providers.set(slot.provider, provider)
+        const quota = quotas.find((entry) => entry.id === slot.id)
+        if (!quota || quota.remaining_percent === null) continue
+        provider.status = "ok"
+        provider.windows.push({
+            label: slot.windowSeconds === 18_000 ? "5時間" : "週間",
+            windowSeconds: slot.windowSeconds,
+            usedPercent: 100 - quota.remaining_percent,
+            resetsAt: quota.resets_at,
+        })
+    }
+    return [...providers.values()]
 }

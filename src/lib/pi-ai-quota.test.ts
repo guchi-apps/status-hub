@@ -33,6 +33,29 @@ function quotaOf(result: ReturnType<typeof toPiAiQuota>, id: string) {
 }
 
 describe("toPiAiQuota", () => {
+    it("旧room-panelが読む providers[].windows[].usedPercent を互換で返す（#621）", () => {
+        const result = toPiAiQuota(
+            makeSnapshot([makeProvider("claude", claudeWindows()), makeProvider("chatgpt", chatGptWindows())], NOW),
+            new Map()
+        )
+        const claude = result.providers.find((entry) => entry.id === "claude")
+        assert.equal(claude?.status, "ok")
+        assert.deepEqual(
+            claude?.windows.map((window) => [window.windowSeconds, window.usedPercent, window.label]),
+            [
+                [FIVE_HOUR_SECONDS, 25, "5時間"],
+                [WEEK_SECONDS, 43, "週間"],
+            ]
+        )
+        const chatgpt = result.providers.find((entry) => entry.id === "chatgpt")
+        assert.equal(chatgpt?.windows[0].usedPercent, 3)
+    })
+
+    it("枠が取れない提供元は unavailable で空の windows にする", () => {
+        const result = toPiAiQuota(makeSnapshot([], NOW), new Map())
+        assert.ok(result.providers.every((entry) => entry.status === "unavailable" && entry.windows.length === 0))
+    })
+
     it("残り割合と時刻だけを3枠で返し、note付きの枠は拾わない", () => {
         const store: HeldWindows = new Map()
         const result = toPiAiQuota(
@@ -57,7 +80,7 @@ describe("toPiAiQuota", () => {
         const result = toPiAiQuota(makeSnapshot([provider], NOW), new Map())
         const text = JSON.stringify(result)
         assert.ok(!text.includes("Max"))
-        assert.deepEqual(Object.keys(result).sort(), ["fetched_at", "quotas", "stale"])
+        assert.deepEqual(Object.keys(result).sort(), ["fetched_at", "providers", "quotas", "stale"])
         assert.deepEqual(Object.keys(result.quotas[0]).sort(), ["id", "label", "remaining_percent", "resets_at"])
     })
 
