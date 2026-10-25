@@ -713,10 +713,15 @@ Authorization: Bearer <PI_PANEL_TOKEN>
     {"id": "claude_7d", "label": "Claude 7d", "remaining_percent": 57, "resets_at": "2026-10-26T01:00:00.000Z"},
     {"id": "codex_7d",  "label": "Codex 7d",  "remaining_percent": 97, "resets_at": "2026-11-01T06:11:30.000Z"}
   ],
+  "providers": [ … ],
   "fetched_at": "2026-10-25T07:41:47.000Z",
   "stale": false
 }
 ```
+
+- `providers` は固定取得済みの旧 room-panel（`/api/ai-usage` の形を読む）向けの互換フィールド（#621）。
+  `{id, status, windows: [{label, windowSeconds, usedPercent, resetsAt}]}` で、値のある枠だけを載せる。
+  新しいクライアントは `quotas` を読む
 
 - **認証は `PI_PANEL_TOKEN` だけ。** ログインセッションも `OPS_API_TOKEN` も通さない。未設定なら常に401。
   実値は1Passwordの `op://apps/ops-dashboard/pi-panel-token` で管理し、`.env` には項目名だけを書く
