@@ -20,7 +20,7 @@ StatusHubの共通アクセス設定（[access-control.md](./access-control.md)�
 | research-desk（work-relay） | 未着手 | guchi-apps/work-relay#281 |
 | aide | 未着手 | guchi-apps/aide#576 |
 | myroom（kurashio） | 未着手 | guchi-apps/kurashio#718 |
-| signaly | 未着手 | guchi-apps/signaly#319 |
+| signaly | 未着手（Signaly自体は廃止方針。#625） | guchi-apps/signaly#319 |
 | clip-hive | 未着手 | guchi-apps/clip-hive#184 |
 | asset-manager / meisai-lab | 方針確認中（導入Issueは未起票） | 方針が決まってから起票 |
 

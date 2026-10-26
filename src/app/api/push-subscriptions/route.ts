@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     const target = (await listSubscriptions()).find((item) => item.endpoint === endpoint)
     const own = target && (!target.email || target.email === session.user.email)
     return NextResponse.json({ publicKey, hostAlerts: own ? target.hostAlerts !== false && !!target.email : null,
-        loginAlerts: own ? (target.loginAlerts ?? "always") : null,
+        loginAlerts: own ? (target.loginAlerts ?? "new") : null,
     })
 }
 

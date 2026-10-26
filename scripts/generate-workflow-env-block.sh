@@ -7,7 +7,7 @@
 #
 # 使い方:
 #   scripts/generate-workflow-env-block.sh              # 全件
-#   scripts/generate-workflow-env-block.sh SIGNALY_WEBHOOK_URL,HOST
+#   scripts/generate-workflow-env-block.sh DISCORD_ALERT_WEBHOOK_URL,HOST
 #
 # インデントは既定6（ジョブ直下の env: の下）。第2引数で変更できる。
 set -euo pipefail

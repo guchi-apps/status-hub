@@ -82,23 +82,6 @@ jobs:
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           skip_if_release_exists: true
 
-      - name: Signaly に通知
-        # 通知のためだけにジョブを分けない。Actionsの課金はジョブ単位で1分に切り上げられる
-        # ため、数秒で終わるnotify-releaseジョブが実行のたびに1分かかっていた。
-        #
-        # 通知はリリースの合否そのものではない。ここが失敗してもrun全体を落とさない
-        # （guchi-apps/issue-deck#1302）。
-        if: always()
-        continue-on-error: true
-        env:
-          SIGNALY_WEBHOOK_URL: ${{ secrets.SIGNALY_WEBHOOK_URL }}
-          NOTIFY_STATUS: ${{ job.status }}
-          NOTIFY_APP: ops-dashboard
-          SIGNALY_RELEASE_WEBHOOK_URL: ${{ secrets.SIGNALY_RELEASE_WEBHOOK_URL }}
-          NOTIFY_KIND: リリース
-          NOTIFY_VERSION: ${{ needs.tag.outputs.tag }}
-        run: bash .github/scripts/signaly-notify.sh
-
   build:
     runs-on: ubuntu-latest
     needs: tag
@@ -133,9 +116,7 @@ jobs:
       ISSUE_DECK_URL: ${{ vars.APP_BASE_URL }}
       WEB_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.WEB_PUSH_VAPID_PUBLIC_KEY }}
       WEB_PUSH_VAPID_PRIVATE_KEY: ${{ secrets.WEB_PUSH_VAPID_PRIVATE_KEY }}
-      SIGNALY_WEBHOOK_URL: ${{ secrets.SIGNALY_WEBHOOK_URL }}
-      SIGNALY_LOGIN_WEBHOOK_URL: ${{ secrets.SIGNALY_LOGIN_WEBHOOK_URL }}
-      SIGNALY_ALERT_WEBHOOK_URL: ${{ secrets.SIGNALY_ALERT_WEBHOOK_URL }}
+      DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
       GH_USAGE_ORG: ${{ vars.GH_USAGE_ORG }}
       UPTIMEKUMA_BASE_URL: ${{ vars.UPTIMEKUMA_BASE_URL }}
       UPTIMEKUMA_DASHBOARD_SLUG: ${{ vars.UPTIMEKUMA_DASHBOARD_SLUG }}
@@ -163,7 +144,6 @@ jobs:
           UPTIMEROBOT_READ_ONLY_KEY: ${{ env.UPTIMEROBOT_READ_ONLY_KEY }}
           UPTIMEKUMA_BASE_URL: ${{ env.UPTIMEKUMA_BASE_URL }}
           UPTIMEKUMA_DASHBOARD_SLUG: ${{ env.UPTIMEKUMA_DASHBOARD_SLUG }}
-          SIGNALY_LOGIN_WEBHOOK_URL: ${{ env.SIGNALY_LOGIN_WEBHOOK_URL }}
 
       - name: Create archive
         run: |
@@ -217,9 +197,7 @@ jobs:
       ISSUE_DECK_URL: ${{ vars.APP_BASE_URL }}
       WEB_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.WEB_PUSH_VAPID_PUBLIC_KEY }}
       WEB_PUSH_VAPID_PRIVATE_KEY: ${{ secrets.WEB_PUSH_VAPID_PRIVATE_KEY }}
-      SIGNALY_WEBHOOK_URL: ${{ secrets.SIGNALY_WEBHOOK_URL }}
-      SIGNALY_LOGIN_WEBHOOK_URL: ${{ secrets.SIGNALY_LOGIN_WEBHOOK_URL }}
-      SIGNALY_ALERT_WEBHOOK_URL: ${{ secrets.SIGNALY_ALERT_WEBHOOK_URL }}
+      DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
       GH_USAGE_ORG: ${{ vars.GH_USAGE_ORG }}
       UPTIMEKUMA_BASE_URL: ${{ vars.UPTIMEKUMA_BASE_URL }}
       UPTIMEKUMA_DASHBOARD_SLUG: ${{ vars.UPTIMEKUMA_DASHBOARD_SLUG }}
@@ -281,8 +259,7 @@ jobs:
           UPTIMEKUMA_ADMIN_TOKEN: ${{ env.UPTIMEKUMA_ADMIN_TOKEN }}
           HOST_STATS_TOKEN: ${{ env.HOST_STATS_TOKEN }}
           PI_PANEL_TOKEN: ${{ env.PI_PANEL_TOKEN }}
-          SIGNALY_LOGIN_WEBHOOK_URL: ${{ env.SIGNALY_LOGIN_WEBHOOK_URL }}
-          SIGNALY_ALERT_WEBHOOK_URL: ${{ env.SIGNALY_ALERT_WEBHOOK_URL }}
+          DISCORD_ALERT_WEBHOOK_URL: ${{ env.DISCORD_ALERT_WEBHOOK_URL }}
           ANTHROPIC_OAUTH_REFRESH_TOKEN: ${{ env.ANTHROPIC_OAUTH_REFRESH_TOKEN }}
           OPENAI_CHATGPT_REFRESH_TOKEN: ${{ env.OPENAI_CHATGPT_REFRESH_TOKEN }}
           OPENAI_CHATGPT_ACCOUNT_ID: ${{ env.OPENAI_CHATGPT_ACCOUNT_ID }}
@@ -306,8 +283,8 @@ jobs:
           names=(
             NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ALLOWED_EMAILS
             UPTIMEROBOT_READ_ONLY_KEY UPTIMEKUMA_BASE_URL UPTIMEKUMA_DASHBOARD_SLUG UPTIMEKUMA_USERNAME
-            UPTIMEKUMA_PASSWORD UPTIMEKUMA_ADMIN_TOKEN HOST_STATS_TOKEN PI_PANEL_TOKEN SIGNALY_LOGIN_WEBHOOK_URL
-            SIGNALY_ALERT_WEBHOOK_URL ANTHROPIC_OAUTH_REFRESH_TOKEN OPENAI_CHATGPT_REFRESH_TOKEN
+            UPTIMEKUMA_PASSWORD UPTIMEKUMA_ADMIN_TOKEN HOST_STATS_TOKEN PI_PANEL_TOKEN
+            DISCORD_ALERT_WEBHOOK_URL ANTHROPIC_OAUTH_REFRESH_TOKEN OPENAI_CHATGPT_REFRESH_TOKEN
             OPENAI_CHATGPT_ACCOUNT_ID GH_USAGE_TOKEN GH_USAGE_ORG OP_SERVICE_ACCOUNT_TOKEN WIDGET_TOKEN
             SHARED_TOKEN_API_SECRET SHARED_TOKEN_WRITE_SECRET ISSUE_DECK_URL
             TYPESAFE_USAGE_URL AI_APP_USAGE_SOURCES_WRITE_TOKEN
@@ -349,7 +326,7 @@ jobs:
           USERNAME: ${{ env.USERNAME }}
           SSH_PORT: ${{ env.SSH_PORT }}
 
-      - name: Signaly に通知
+      - name: Discord に失敗を通知
         # 通知のためだけにジョブを分けない（notify-releaseと同じ理由）。deployが動かなかった
         # 場合（tag/buildで失敗・キャンセル）の通知は下のnotifyジョブが受け持つ。
         #
@@ -358,11 +335,11 @@ jobs:
         if: always()
         continue-on-error: true
         env:
-          SIGNALY_WEBHOOK_URL: ${{ env.SIGNALY_WEBHOOK_URL }}
+          DISCORD_ALERT_WEBHOOK_URL: ${{ env.DISCORD_ALERT_WEBHOOK_URL }}
           NOTIFY_APP: ops-dashboard
           NOTIFY_KIND: デプロイ
           NOTIFY_STATUS: ${{ job.status }}
-        run: bash .github/scripts/signaly-notify.sh
+        run: bash .github/scripts/discord-alert-notify.sh
 
   notify:
     runs-on: ubuntu-latest
@@ -379,7 +356,7 @@ jobs:
     #
     # このブロックは scripts/generate-workflow-env-block.sh で生成する（#51）。
     env:
-      SIGNALY_WEBHOOK_URL: ${{ secrets.SIGNALY_WEBHOOK_URL }}
+      DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
 
     steps:
       - name: Checkout code
@@ -400,13 +377,13 @@ jobs:
           fi
           echo "result=$result" >> "$GITHUB_OUTPUT"
 
-      - name: Signaly に通知
+      - name: Discord に失敗を通知
         # 通知はCIやデプロイの合否そのものではない。ここが失敗してもrun全体を落とさない
         # （guchi-apps/issue-deck#1302）。
         continue-on-error: true
         env:
-          SIGNALY_WEBHOOK_URL: ${{ env.SIGNALY_WEBHOOK_URL }}
+          DISCORD_ALERT_WEBHOOK_URL: ${{ env.DISCORD_ALERT_WEBHOOK_URL }}
           NOTIFY_APP: ops-dashboard
           NOTIFY_KIND: デプロイ
           NOTIFY_STATUS: ${{ steps.status.outputs.result }}
-        run: bash .github/scripts/signaly-notify.sh
+        run: bash .github/scripts/discord-alert-notify.sh

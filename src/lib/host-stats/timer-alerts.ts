@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
-import { notifySignalyAlert } from "@/lib/signaly"
+import { notifyDiscordAlert } from "@/lib/discord-alert"
 import { getHostDataDir, writeFileAtomic } from "@/lib/host-stats/store"
 import {
     evaluateTimers,
@@ -11,7 +11,9 @@ import {
 import type { HostStatsTimer } from "@/types/host-stats"
 
 /**
- * 定期ジョブの異常をSignalyへ通知する（#75）。
+ * 定期ジョブの異常をDiscordへ通知する（#75・#625）。
+ *
+ * **通知するのは異常だけ。** 復旧は通知しない（状態は記録する）。
  *
  * **鳴らしすぎないことが要件の中心**。毎時のジョブが1日壊れれば24回失敗し、エージェントは
  * 毎分同じ状態を送ってくる。そのまま流すと通知が無視されるようになり、仕組みごと意味を失う。
@@ -83,7 +85,7 @@ function advance(
     previous: TimerAlertState,
     threshold: number,
     nowIso: string
-): { next: TimerAlertState; notify: "alert" | "recovery" | null } {
+): { next: TimerAlertState; notify: "alert" | null } {
     const next: TimerAlertState = { ...previous }
 
     const runChanged = status.timer.lastFinishedAt !== previous.lastFinishedAt
@@ -114,15 +116,16 @@ function advance(
     // 初めて観測したユニットが正常なら、復旧通知は出さずに状態だけ覚える
     if (previous.notifiedState === undefined && alertState === "ok") return { next, notify: null }
 
-    return { next, notify: alertState === "ok" ? "recovery" : "alert" }
+    // 復旧は通知しない（#625。異常時のみ通知する方針）。状態だけ記録して次の異常に備える
+    return { next, notify: alertState === "ok" ? null : "alert" }
 }
 
 /**
  * 受信したレポートの定期ジョブを判定し、状態が変わったユニットだけを通知する。
  *
- * **「通知済み」を記録するのは、Signalyへ届いたものだけ。** 送れなかったユニットは
+ * **「通知済み」を記録するのは、Discordへ届いたものだけ。** 送れなかったユニットは
  * `notifiedState` を前回のまま残すので、次の受信で状態の変化として再び検出され、再送される。
- * 先に記録してから送ると、Signalyが落ちている間の異常通知は二度と出ない。
+ * 先に記録してから送ると、Discordが落ちている間の異常通知は二度と出ない。
  * 失敗回数（`failureCount`）と最終実行の時刻は、通知の成否によらず進める。
  *
  * 呼び出し元（POST /api/host-stats）を止めないよう、例外はここで握りつぶさず呼び出し側で
@@ -140,7 +143,7 @@ export async function processTimerAlerts(input: {
     const threshold = getTimerFailureThreshold()
     const previous = await readState(input.hostId)
     const store: TimerAlertStore = {}
-    const pending: { key: string; prior: TimerAlertState; status: TimerStatus; kind: "alert" | "recovery" }[] = []
+    const pending: { key: string; prior: TimerAlertState; status: TimerStatus; kind: "alert" }[] = []
 
     for (const status of evaluateTimers(input.timers, now)) {
         const key = status.timer.name
@@ -157,26 +160,18 @@ export async function processTimerAlerts(input: {
         if (notify) pending.push({ key, prior, status, kind: notify })
     }
 
-    // 応答しない相手に1件ずつ待たされないよう並べて送る（呼び出し元のエージェントが待っている）
+    // 応答しない相手に1件ずつ待たされないよう並べて送る（呼び出し元のエージェントが待っている）。
+    // 復旧は投稿しない（状態は記録済みなので、送ったものとして扱う）
     const delivered = await Promise.all(
-        pending.map(({ status, kind }) => {
+        pending.map(({ status }) => {
             const failureCount = store[status.timer.name]?.failureCount ?? 0
 
-            return notifySignalyAlert({
-                kind,
-                title:
-                    kind === "alert"
-                        ? `定期ジョブの異常: ${input.hostLabel} / ${status.timer.name}`
-                        : `定期ジョブが復旧: ${input.hostLabel} / ${status.timer.name}`,
-                description:
-                    kind === "alert"
-                        ? [status.label, status.detail].filter(Boolean).join(" — ")
-                        : "直近の実行が成功しました",
+            return notifyDiscordAlert({
+                title: `定期ジョブの異常: ${input.hostLabel} / ${status.timer.name}`,
+                description: [status.label, status.detail].filter(Boolean).join(" — "),
                 fields: [
                     ...timerFields(status.timer),
-                    ...(kind === "alert" && failureCount > 1
-                        ? [{ name: "連続失敗", value: `${failureCount}回` }]
-                        : []),
+                    ...(failureCount > 1 ? [{ name: "連続失敗", value: `${failureCount}回` }] : []),
                 ],
             })
         })

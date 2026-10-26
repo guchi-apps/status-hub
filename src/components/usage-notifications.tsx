@@ -340,11 +340,11 @@ export function UsageNotifications({ isAdmin = false }: { isAdmin?: boolean }) {
                                 {LOGIN_ALERTS_OPTIONS.map((option) => (
                                     <Button
                                         key={option.value}
-                                        variant={(loginAlerts ?? "always") === option.value ? "default" : "outline"}
+                                        variant={(loginAlerts ?? "new") === option.value ? "default" : "outline"}
                                         size="sm"
                                         type="button"
                                         role="radio"
-                                        aria-checked={(loginAlerts ?? "always") === option.value}
+                                        aria-checked={(loginAlerts ?? "new") === option.value}
                                         onClick={() => changeLoginAlerts(option.value)}
                                         disabled={busy}
                                     >
