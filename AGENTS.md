@@ -414,8 +414,9 @@ ChatGPTの5時間枠は対象外（Issueの指定）。
 - **オンライン判定は `judgeHostOnline` の1関数を画面と共有する。** 通知と件数で別々に決めない。
   定期ジョブは `summarizeTimers` を使い回し、独自の除外処理を書かない
 - **Pushはホストの停止・復旧・再起動だけ。** サイトDOWN・ジョブ・サービスの増減はPushしない（iOSは表示なしの
-  バッジ更新Pushが使えず、ジョブはSignalyと二重になるため）。バッジは `seq` で巻き戻りを防ぎ、`public/sw.js` と
+  バッジ更新Pushが使えず、ジョブはDiscordと二重になるため）。バッジは `seq` で巻き戻りを防ぎ、`public/sw.js` と
   `badge-client.ts` は同じIndexedDB（`status-hub-badge`）を読み書きする
+- **定期ジョブの異常は `DISCORD_ALERT_WEBHOOK_URL`（全リポジトリ共通。`src/lib/discord-alert.ts`）へ、異常のときだけ送る**（#624）。復旧は投稿せず状態の記録だけ進める。Signalyへは戻さない。URLの実値はログ・Issue・PRに出さない
 - 送信先は `isHostAlertRecipient`（いまアクセス許可・端末オン・利用者記録あり）だけ。`sendPushToAll` を使わない
 - 監視の取得失敗を「DOWN 0件」にしない（前回を持ち越し、取得不可へ出す）。通知の文面で原因を断定しない
 
@@ -496,8 +497,8 @@ ChatGPTの5時間枠は対象外（Issueの指定）。
 
 ## ログイン通知の接続元IP
 
-ログイン通知（`src/lib/signaly.ts`）の `接続元IP` は、Signalyが「見覚えのない接続元か」を判定する
-手がかりになる（#281）。**`X-Forwarded-For` は先頭ではなく末尾（`clientIpFromForwardedFor`）から読む。**
+ログイン通知の `接続元IP`（#281。通知先はSignalyからWeb Pushに替わった）は、「見覚えのない接続元か」を判定する
+手がかりになる。**`X-Forwarded-For` は先頭ではなく末尾（`clientIpFromForwardedFor`）から読む。**
 mod_proxy はクライアントが送った値を消さず、末尾へ実IPを足すだけなので、先頭はクライアントが自由に
 決められる。`X-Real-IP` も読まない（Apacheは付けないため、クライアントの値がそのまま届く）。
 
