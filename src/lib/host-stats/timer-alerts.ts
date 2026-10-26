@@ -11,10 +11,9 @@ import {
 import type { HostStatsTimer } from "@/types/host-stats"
 
 /**
- * 定期ジョブの異常をDiscordへ通知する（#75・#624）。
+ * 定期ジョブの異常をDiscordへ通知する（#75・#625）。
  *
- * **異常（失敗・遅延）だけを送る。復旧は新規投稿せず、状態の記録だけを進める**（成功は通知しない方針）。
- * 失敗→遅延のように悪化の種類が変わったときは、状態が変わるので再び送る。
+ * **通知するのは異常だけ。** 復旧は通知しない（状態は記録する）。
  *
  * **鳴らしすぎないことが要件の中心**。毎時のジョブが1日壊れれば24回失敗し、エージェントは
  * 毎分同じ状態を送ってくる。そのまま流すと通知が無視されるようになり、仕組みごと意味を失う。
@@ -86,7 +85,7 @@ function advance(
     previous: TimerAlertState,
     threshold: number,
     nowIso: string
-): { next: TimerAlertState; notify: "alert" | "recovery" | null } {
+): { next: TimerAlertState; notify: "alert" | null } {
     const next: TimerAlertState = { ...previous }
 
     const runChanged = status.timer.lastFinishedAt !== previous.lastFinishedAt
@@ -117,7 +116,8 @@ function advance(
     // 初めて観測したユニットが正常なら、復旧通知は出さずに状態だけ覚える
     if (previous.notifiedState === undefined && alertState === "ok") return { next, notify: null }
 
-    return { next, notify: alertState === "ok" ? "recovery" : "alert" }
+    // 復旧は通知しない（#625。異常時のみ通知する方針）。状態だけ記録して次の異常に備える
+    return { next, notify: alertState === "ok" ? null : "alert" }
 }
 
 /**
@@ -125,7 +125,7 @@ function advance(
  *
  * **「通知済み」を記録するのは、Discordへ届いたものだけ。** 送れなかったユニットは
  * `notifiedState` を前回のまま残すので、次の受信で状態の変化として再び検出され、再送される。
- * 先に記録してから送ると、Discordへ送れない間の異常通知は二度と出ない。
+ * 先に記録してから送ると、Discordが落ちている間の異常通知は二度と出ない。
  * 失敗回数（`failureCount`）と最終実行の時刻は、通知の成否によらず進める。
  *
  * 呼び出し元（POST /api/host-stats）を止めないよう、例外はここで握りつぶさず呼び出し側で
@@ -143,7 +143,7 @@ export async function processTimerAlerts(input: {
     const threshold = getTimerFailureThreshold()
     const previous = await readState(input.hostId)
     const store: TimerAlertStore = {}
-    const pending: { key: string; prior: TimerAlertState; status: TimerStatus; kind: "alert" | "recovery" }[] = []
+    const pending: { key: string; prior: TimerAlertState; status: TimerStatus; kind: "alert" }[] = []
 
     for (const status of evaluateTimers(input.timers, now)) {
         const key = status.timer.name
@@ -163,9 +163,7 @@ export async function processTimerAlerts(input: {
     // 応答しない相手に1件ずつ待たされないよう並べて送る（呼び出し元のエージェントが待っている）。
     // 復旧は投稿しない（状態は記録済みなので、送ったものとして扱う）
     const delivered = await Promise.all(
-        pending.map(({ status, kind }) => {
-            if (kind === "recovery") return true
-
+        pending.map(({ status }) => {
             const failureCount = store[status.timer.name]?.failureCount ?? 0
 
             return notifyDiscordAlert({

@@ -497,8 +497,8 @@ ChatGPTの5時間枠は対象外（Issueの指定）。
 
 ## ログイン通知の接続元IP
 
-ログイン通知の `接続元IP`（#281。通知先はSignalyからWeb Pushに替わった）は、「見覚えのない接続元か」を判定する
-手がかりになる。**`X-Forwarded-For` は先頭ではなく末尾（`clientIpFromForwardedFor`）から読む。**
+ログイン通知（`src/lib/login-notify.ts`）の `接続元IP` は、「見覚えのない接続元か」（初出判定）の
+手がかりになる（#281。Signalyは廃止され、判定はStatusHubの `login_events` で行う。#625）。**`X-Forwarded-For` は先頭ではなく末尾（`clientIpFromForwardedFor`）から読む。**
 mod_proxy はクライアントが送った値を消さず、末尾へ実IPを足すだけなので、先頭はクライアントが自由に
 決められる。`X-Real-IP` も読まない（Apacheは付けないため、クライアントの値がそのまま届く）。
 
@@ -506,7 +506,7 @@ mod_proxy はクライアントが送った値を消さず、末尾へ実IPを�
   **一次情報源は `vps` リポジトリの `apache/sites-available/admin.gucchii.com.conf`** で、ここの雛形を
   直しただけでは本番へ反映されない。アプリ側が末尾を読むので、Apacheの反映前後でどちらも正しい値になる
 - 手前にCDNなどを足すとプロキシが2段になり、末尾がそのIPになる。そのときは読み方を見直す
-- 同じ書き方（先頭を読む）は共有ドキュメント `_docs/guides/signaly-notifications.md` の共通実装にもある
+- 同じ書き方（先頭を読む）は共有ドキュメント `_docs/guides/signaly-notifications.md` の共通実装にもある（Signaly廃止後は参照しない）
 
 ## GitHubの課金・使用量API
 
