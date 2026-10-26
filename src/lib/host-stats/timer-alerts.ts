@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
-import { notifySignalyAlert } from "@/lib/signaly"
+import { notifyDiscordAlert } from "@/lib/discord-alert"
 import { getHostDataDir, writeFileAtomic } from "@/lib/host-stats/store"
 import {
     evaluateTimers,
@@ -11,7 +11,10 @@ import {
 import type { HostStatsTimer } from "@/types/host-stats"
 
 /**
- * 定期ジョブの異常をSignalyへ通知する（#75）。
+ * 定期ジョブの異常をDiscordへ通知する（#75・#624）。
+ *
+ * **異常（失敗・遅延）だけを送る。復旧は新規投稿せず、状態の記録だけを進める**（成功は通知しない方針）。
+ * 失敗→遅延のように悪化の種類が変わったときは、状態が変わるので再び送る。
  *
  * **鳴らしすぎないことが要件の中心**。毎時のジョブが1日壊れれば24回失敗し、エージェントは
  * 毎分同じ状態を送ってくる。そのまま流すと通知が無視されるようになり、仕組みごと意味を失う。
@@ -120,9 +123,9 @@ function advance(
 /**
  * 受信したレポートの定期ジョブを判定し、状態が変わったユニットだけを通知する。
  *
- * **「通知済み」を記録するのは、Signalyへ届いたものだけ。** 送れなかったユニットは
+ * **「通知済み」を記録するのは、Discordへ届いたものだけ。** 送れなかったユニットは
  * `notifiedState` を前回のまま残すので、次の受信で状態の変化として再び検出され、再送される。
- * 先に記録してから送ると、Signalyが落ちている間の異常通知は二度と出ない。
+ * 先に記録してから送ると、Discordへ送れない間の異常通知は二度と出ない。
  * 失敗回数（`failureCount`）と最終実行の時刻は、通知の成否によらず進める。
  *
  * 呼び出し元（POST /api/host-stats）を止めないよう、例外はここで握りつぶさず呼び出し側で
@@ -157,26 +160,20 @@ export async function processTimerAlerts(input: {
         if (notify) pending.push({ key, prior, status, kind: notify })
     }
 
-    // 応答しない相手に1件ずつ待たされないよう並べて送る（呼び出し元のエージェントが待っている）
+    // 応答しない相手に1件ずつ待たされないよう並べて送る（呼び出し元のエージェントが待っている）。
+    // 復旧は投稿しない（状態は記録済みなので、送ったものとして扱う）
     const delivered = await Promise.all(
         pending.map(({ status, kind }) => {
+            if (kind === "recovery") return true
+
             const failureCount = store[status.timer.name]?.failureCount ?? 0
 
-            return notifySignalyAlert({
-                kind,
-                title:
-                    kind === "alert"
-                        ? `定期ジョブの異常: ${input.hostLabel} / ${status.timer.name}`
-                        : `定期ジョブが復旧: ${input.hostLabel} / ${status.timer.name}`,
-                description:
-                    kind === "alert"
-                        ? [status.label, status.detail].filter(Boolean).join(" — ")
-                        : "直近の実行が成功しました",
+            return notifyDiscordAlert({
+                title: `定期ジョブの異常: ${input.hostLabel} / ${status.timer.name}`,
+                description: [status.label, status.detail].filter(Boolean).join(" — "),
                 fields: [
                     ...timerFields(status.timer),
-                    ...(kind === "alert" && failureCount > 1
-                        ? [{ name: "連続失敗", value: `${failureCount}回` }]
-                        : []),
+                    ...(failureCount > 1 ? [{ name: "連続失敗", value: `${failureCount}回` }] : []),
                 ],
             })
         })
