@@ -68,7 +68,7 @@ jobs:
     #
     # このブロックは scripts/generate-workflow-env-block.sh で生成する（#51）。
     env:
-      SIGNALY_WEBHOOK_URL: ${{ secrets.SIGNALY_WEBHOOK_URL }}
+      DISCORD_ALERT_WEBHOOK_URL: ${{ secrets.DISCORD_ALERT_WEBHOOK_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -87,14 +87,14 @@ jobs:
           echo "result=$result" >> "$GITHUB_OUTPUT"
           echo "jobs=verify: $verify" >> "$GITHUB_OUTPUT"
 
-      - name: Signaly に通知
+      - name: Discord に失敗を通知
         # 通知はCIやデプロイの合否そのものではない。ここが失敗してもrun全体を落とさない
         # （guchi-apps/issue-deck#1302）。
         continue-on-error: true
         env:
-          SIGNALY_WEBHOOK_URL: ${{ env.SIGNALY_WEBHOOK_URL }}
+          DISCORD_ALERT_WEBHOOK_URL: ${{ env.DISCORD_ALERT_WEBHOOK_URL }}
           NOTIFY_APP: ops-dashboard
           NOTIFY_KIND: CI
           NOTIFY_STATUS: ${{ steps.status.outputs.result }}
           NOTIFY_JOB: ${{ steps.status.outputs.jobs }}
-        run: bash .github/scripts/signaly-notify.sh
+        run: bash .github/scripts/discord-alert-notify.sh

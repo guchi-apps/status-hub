@@ -102,7 +102,28 @@ node scripts/access-recover.mjs set-environment production    # 環境名の食�
 ## ログイン履歴とログイン通知（#516）
 
 ログイン成功は `login_events`（アクセスDB。直近200件）へ残り、アクセス管理の「ログイン履歴」タブで見られる。同じメールで初めて見る接続元IPは `new_ip`（「新しい接続元」）。
-管理者の端末へはWeb Pushで知らせる（`src/lib/login-notify.ts`）。端末ごとに「毎回／新しい接続元のみ／オフ」を通知メニューで選ぶ（既定は毎回）。記録・送信の失敗でログインは止めない。接続元IPは `X-Forwarded-For` の末尾から読む。
+**通常のログインは通知しない**（#625。Signaly廃止・異常時のみDiscord通知の方針）。通知するのは新しい接続元だけで、次の2経路へ送る（`src/lib/login-notify.ts`）。
+
+- Discordの異常通知: 全リポジトリ共通のWebhook（`DISCORD_ALERT_WEBHOOK_URL`。1Passwordの `apps/Notify` の `alert-webhook-url`）。載せるのはアカウント（先頭1文字以外を伏せたメール）・接続元IP・端末（UAの先頭100文字）・アプリ名だけ
+- 管理者の端末へのWeb Push: 端末ごとに「毎回／新しい接続元のみ／オフ」を通知メニューで選ぶ（既定は「新しい接続元のみ」）
+
+記録・送信の失敗でログインは止めない。接続元IPは `X-Forwarded-For` の**末尾**から読む（先頭はクライアントが決められるため、初出判定を回避されうる）。IPが取れない・IPとして読めないときは初出にしない（見覚えの有無が判断できないため）。
+
+### 他アプリのログインの報告（`POST /api/access/v1/login-events`）
+
+各アプリは、自分のサーバーで検証したログイン成功を、判定API（`decision`）と同じアプリ別トークンで報告する。初出判定はアプリ横断（同じメールで履歴に無い接続元IP）で、アプリごとにSignalyで持っていた履歴の代わりになる。
+
+```
+POST /api/access/v1/login-events
+Authorization: Bearer <アプリ別トークン>
+{ "email": "...", "forwardedFor": "<受けた X-Forwarded-For の生の値>", "userAgent": "..." }
+→ { "newIp": true | false }
+```
+
+- `forwardedFor` は生の値で渡す。StatusHub側で末尾の要素だけを採る。アプリ側で取り出した値を渡すときは `ip`
+- 応答を待たず、失敗してもログインを止めない（`catch` で握りつぶす）
+- **異常として扱うのは「新しい接続元」だけ。** 許可のない利用者のログイン試行・失敗の連続などは、通常のGoogleログイン失敗と区別しづらく通知が多くなるため含めない。必要になったら別Issueで定義する
+- 各アプリのSignaly送信の撤去は、アプリごとの導入Issue（[access-rollout.md](./access-rollout.md)）で行う。**このAPIが届くこと（Discordへの実到達）を確かめてから**旧経路を外す
 
 ### IssueDeck自身のトークン更新（#551）
 
