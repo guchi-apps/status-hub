@@ -416,6 +416,7 @@ ChatGPTの5時間枠は対象外（Issueの指定）。
 - **Pushはホストの停止・復旧・再起動だけ。** サイトDOWN・ジョブ・サービスの増減はPushしない（iOSは表示なしの
   バッジ更新Pushが使えず、ジョブはDiscordと二重になるため）。バッジは `seq` で巻き戻りを防ぎ、`public/sw.js` と
   `badge-client.ts` は同じIndexedDB（`status-hub-badge`）を読み書きする
+- **定期ジョブの異常は `DISCORD_ALERT_WEBHOOK_URL`（全リポジトリ共通。`src/lib/discord-alert.ts`）へ、異常のときだけ送る**（#624）。復旧は投稿せず状態の記録だけ進める。Signalyへは戻さない。URLの実値はログ・Issue・PRに出さない
 - 送信先は `isHostAlertRecipient`（いまアクセス許可・端末オン・利用者記録あり）だけ。`sendPushToAll` を使わない
 - 監視の取得失敗を「DOWN 0件」にしない（前回を持ち越し、取得不可へ出す）。通知の文面で原因を断定しない
 

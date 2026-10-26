@@ -160,7 +160,8 @@ export async function processTimerAlerts(input: {
         if (notify) pending.push({ key, prior, status, kind: notify })
     }
 
-    // 応答しない相手に1件ずつ待たされないよう並べて送る（呼び出し元のエージェントが待っている）
+    // 応答しない相手に1件ずつ待たされないよう並べて送る（呼び出し元のエージェントが待っている）。
+    // 復旧は投稿しない（状態は記録済みなので、送ったものとして扱う）
     const delivered = await Promise.all(
         pending.map(({ status }) => {
             const failureCount = store[status.timer.name]?.failureCount ?? 0
