@@ -14,6 +14,13 @@ export interface ChangelogEntry {
 // 新しいバージョンを配列の先頭に追記していく（changelog-ja skill の運用ルールに従う）
 export const changelog: ChangelogEntry[] = [
     {
+        version: "0.57.1",
+        date: "2026-11-01",
+        changes: [
+            "運用を終了したアプリ（stockly）を、AI使用量の用途一覧から外しました。",
+        ],
+    },
+    {
         version: "0.55.3",
         date: "2026-10-17",
         changes: [
