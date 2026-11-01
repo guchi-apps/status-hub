@@ -61,7 +61,7 @@ jobs:
       #   （`.github/deploy.env.tpl`のようにファイル名の途中に現れるため）
       # - デプロイ資材のディレクトリ名は`deploy/`と`deployment/`に割れている（myroom）
       # - **`dependency-check`はルートの`package.json`しか見ない。** ルートに置いていない
-      #   リポジトリ（signalyは`backend/requirements.txt`だけ、myroomはルートが空スタブで
+      #   リポジトリ（Python製のリポジトリは`backend/requirements.txt`だけ、myroomはルートが空スタブで
       #   実体が`frontend/package.json`・`requirements.txt`）では依存の更新が一度も
       #   リスク判定されないため、依存ファイルのパスで補う
       risk-paths: |

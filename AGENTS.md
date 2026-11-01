@@ -506,7 +506,6 @@ mod_proxy はクライアントが送った値を消さず、末尾へ実IPを�
   **一次情報源は `vps` リポジトリの `apache/sites-available/admin.gucchii.com.conf`** で、ここの雛形を
   直しただけでは本番へ反映されない。アプリ側が末尾を読むので、Apacheの反映前後でどちらも正しい値になる
 - 手前にCDNなどを足すとプロキシが2段になり、末尾がそのIPになる。そのときは読み方を見直す
-- 同じ書き方（先頭を読む）は共有ドキュメント `_docs/guides/signaly-notifications.md` の共通実装にもある（Signaly廃止後は参照しない）
 
 ## GitHubの課金・使用量API
 
