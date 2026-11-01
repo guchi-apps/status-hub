@@ -550,7 +550,7 @@ GPT-5.6系（aide-botがCodex CLI経由で使う）はChatGPTの定額枠で請�
 
 - 計測中 — 取得結果（スナップショット）にアプリがあり、取得できている（issue-deckのTypeSafe補完も含む）
 - 取得不可 — 連携先に載っているが取得できていない
-- 未連携 — AI APIを呼ぶが、使用量を読む連携先に載っていない（asset-manager・dayspan・portfolio・stockly・research-deskなど）。アプリ側に使用量APIを足して管理画面へ載せると「計測中」になる
+- 未連携 — AI APIを呼ぶが、使用量を読む連携先に載っていない（asset-manager・dayspan・portfolio・research-deskなど）。アプリ側に使用量APIを足して管理画面へ載せると「計測中」になる
 - 枠のみ — サブスクの利用枠を使う用途（Claude Code・5時間枠の先開け・Codex）。アプリ別には数えられず、提供元別の利用枠カードで見る
 - Claude.ai・ChatGPTの手動利用は取得手段が無いため載せない
 
