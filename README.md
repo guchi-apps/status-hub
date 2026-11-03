@@ -146,7 +146,7 @@ Prometheus + Grafana は、VPSがメモリ2GBでNext.jsを10本抱えている�
 エージェントの `HOST_STATS_APPS_ROOT`（VPSは `/home/github-user/apps`）を設定したホストだけが送り、未設定のホストや古いエージェントからは項目ごと届かないためパネルも出ない。
 現在値だけを持ち、履歴には残さない。
 
-- **メモリはプロセス名ではなく作業ディレクトリで振り分ける。** 「メモリ上位」の一覧は `next-server` や `node` が並ぶだけでどのアプリか読めず、PM2 に聞く方法では user systemd で動く signaly・vps-status-api が漏れるため。`/proc/<pid>/cwd` が `HOST_STATS_APPS_ROOT/<アプリ>/…` にあるプロセスのメモリを合計する。cwd を別の場所にして起動しているプロセスは「アプリ以外」に入る
+- **メモリはプロセス名ではなく作業ディレクトリで振り分ける。** 「メモリ上位」の一覧は `next-server` や `node` が並ぶだけでどのアプリか読めず、PM2 に聞く方法では user systemd で動く vps-status-api が漏れるため。`/proc/<pid>/cwd` が `HOST_STATS_APPS_ROOT/<アプリ>/…` にあるプロセスのメモリを合計する。cwd を別の場所にして起動しているプロセスは「アプリ以外」に入る
 - **足し上げるのは RSS ではなく PSS（`smaps_rollup` の `Pss`）。** RSS は共有ライブラリなどのページをプロセスの数だけ重複して数え、Node のプロセスでは実測で RSS 211MB に対し PSS 108MB と約2倍に膨らむ。RSS の合計ではホスト全体の使用量（MemTotal − MemAvailable）を超え、「使用量 − アプリ合計」で出す「アプリ以外」が負になる。`smaps_rollup` は root でないと他ユーザーのプロセス分を読めないため、読めないときだけ RSS で代用する（内訳バーは使用量で頭打ちにしている）
 - **ディスクは1時間ごとにしか測らない。** `du` は node_modules まで辿るため毎分は重く、値もそう変わらない。測った結果はユニットの `StateDirectory=` が用意する `/var/lib/ops-dashboard-host-stats/app-disk.tsv` にキャッシュし、間隔は `HOST_STATS_APP_DISK_INTERVAL`（既定3600秒）で変えられる。**キャッシュを書けない古いユニットのままだと、ディスクは測らずメモリだけを送る**（毎分 `du` を走らせないため）
 - 横棒の長さは最大のアプリを基準にしている。1アプリはホスト全体の数%にしかならず、全体を分母にすると差が読めないため。全体に対する割合は右端の％で出す
@@ -369,7 +369,7 @@ tail -f /var/log/ops-dashboard-host-stats.log
 
 **Uptime Kuma の HTTP 監視と重複しないものだけを選ぶ**方針にしている。Uptime Kuma は「外から応答があるか」、
 systemd は「そのホストでプロセスが動いているか」を見るもので、HTTPの口を持たないもの（cron・fail2ban・DB）は
-後者でしか分からない。逆に、各Next.jsアプリや signaly のようにUptime Kumaが直接見ているものを入れても重複にしかならない。
+後者でしか分からない。逆に、各Next.jsアプリのようにUptime Kumaが直接見ているものを入れても重複にしかならない。
 選定結果は `scripts/host-stats/host-stats.*.env.example` に理由つきで書いてある。
 
 なお次の2つは user systemd（`github-user`）で動いており、rootの `systemctl` からは見えないため、

@@ -506,7 +506,6 @@ mod_proxy はクライアントが送った値を消さず、末尾へ実IPを�
   **一次情報源は `vps` リポジトリの `apache/sites-available/admin.gucchii.com.conf`** で、ここの雛形を
   直しただけでは本番へ反映されない。アプリ側が末尾を読むので、Apacheの反映前後でどちらも正しい値になる
 - 手前にCDNなどを足すとプロキシが2段になり、末尾がそのIPになる。そのときは読み方を見直す
-- 同じ書き方（先頭を読む）は共有ドキュメント `_docs/guides/signaly-notifications.md` の共通実装にもある（Signaly廃止後は参照しない）
 
 ## GitHubの課金・使用量API
 
@@ -562,7 +561,7 @@ guchi-apps/vps#275・#301）を呼ぶ。送れるのは `upload`（配布物）�
 - **gateのアプリ名は `ops-dashboard`**（リポジトリ名の `status-hub` ではない）。gateは置き場を
   `/home/github-user/apps/<アプリ名>`、PM2のプロセスを `<アプリ名>` と決め打ちするため、旧名のままの
   置き場・プロセス名（`deploy/ecosystem.config.js` の `name`）に合わせる。置き場は鍵の `command=` が固定し、
-  `TARGET_DIR` はもう使わない（マニフェストには移行を確かめるまで残す）
+  `TARGET_DIR` はもう使わない（マニフェストからも撤去した）
 - **従来 `.env` へ書いていた値は、すべて `Send environment variables` で送る。** StatusHubは他アプリの
   ログイン許可を判定する（共通アクセス設定）ため、1つ落とすだけで全アプリのログインに響く。
   値を足すときは step の `env:` と `names=(...)` の両方へ足す。改行を含む値はgateへ送れないため、step が `::error::` で止める
