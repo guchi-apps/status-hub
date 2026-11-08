@@ -7,6 +7,7 @@ import { DashboardCard } from "@/components/dashboard-card"
 import { AccessDenied, SkeletonBar, SkeletonGroup } from "@/components/skeleton"
 import { SectionHeading } from "@/components/section-heading"
 import { UsageBar } from "@/components/usage-bar"
+import { describeRefreshTokenExpiry } from "@/lib/ai-usage/refresh-token-expiry"
 import { formatExpiry, formatRemaining, formatTokens, formatUsd, getElapsedPercent, toDayMarkers } from "@/lib/usage-format"
 import type {
     AiProviderCredit,
@@ -153,6 +154,8 @@ function MeteredUsage({ usage }: { usage: AiProviderMeteredUsage }) {
 }
 
 function ProviderCard({ provider, now }: { provider: AiProviderUsage; now: number }) {
+    const expiryNotice = describeRefreshTokenExpiry(provider.refreshTokenExpiresAt, now)
+
     return (
         <DashboardCard className="h-full flex flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4">
             <div className="flex items-center justify-between gap-2">
@@ -178,6 +181,12 @@ function ProviderCard({ provider, now }: { provider: AiProviderUsage; now: numbe
             ) : (
                 <p className="text-[11px] sm:text-xs text-muted-foreground">
                     {provider.message ?? "使用状況を取得できませんでした"}
+                </p>
+            )}
+
+            {expiryNotice && (
+                <p role="status" className="text-[11px] sm:text-xs text-amber-400">
+                    {expiryNotice}
                 </p>
             )}
 

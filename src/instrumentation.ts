@@ -11,12 +11,16 @@ const INTERVAL_MS = 30_000
 /** 単価の定期チェック（#497）が「予定時刻を過ぎたか」を見にいく間隔。実際の取得は週1回だけ */
 const PRICE_WATCH_INTERVAL_MS = 60_000
 
+/** リフレッシュトークンの失効予定を見にいく間隔（#641）。記録済みの期限を読むだけで、提供元へは問い合わせない */
+const TOKEN_EXPIRY_INTERVAL_MS = 60 * 60_000
+
 export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return
 
     const globalForTimer = globalThis as unknown as {
         __incidentTimer?: ReturnType<typeof setInterval>
         __priceWatchTimer?: ReturnType<typeof setInterval>
+        __tokenExpiryTimer?: ReturnType<typeof setInterval>
     }
     if (globalForTimer.__incidentTimer) return
 
@@ -39,4 +43,16 @@ export async function register() {
     globalForTimer.__priceWatchTimer = setInterval(priceTick, PRICE_WATCH_INTERVAL_MS)
     globalForTimer.__priceWatchTimer.unref?.()
     priceTick()
+
+    // AI利用枠のリフレッシュトークンの失効が近づいたらDiscordへ知らせる
+    const { runTokenExpiryAlerts } = await import("@/lib/ai-usage/token-expiry-alert")
+    const tokenExpiryTick = () => {
+        runTokenExpiryAlerts().catch((error) =>
+            console.error("[token-expiry-alert] 判定に失敗しました:", error)
+        )
+    }
+
+    globalForTimer.__tokenExpiryTimer = setInterval(tokenExpiryTick, TOKEN_EXPIRY_INTERVAL_MS)
+    globalForTimer.__tokenExpiryTimer.unref?.()
+    tokenExpiryTick()
 }

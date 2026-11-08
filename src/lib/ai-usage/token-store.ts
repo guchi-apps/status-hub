@@ -12,16 +12,21 @@ import { describeError } from "@/lib/upstream"
  */
 export type TokenProvider = "claude" | "chatgpt"
 
-interface StoredTokens {
+export interface StoredTokens {
     /** この項目を初期化したときの環境変数の値。env が差し替わったら保存内容を破棄する */
     seededFrom: string
     refreshToken: string
     accessToken?: string
     /** アクセストークンの有効期限（epoch ミリ秒） */
     expiresAt?: number
+    /**
+     * リフレッシュトークン自体の失効予定（epoch ミリ秒）。Anthropic のリフレッシュトークンには
+     * ローテーションしても延びない絶対期限（約4週間）がある（#641）。提供元が返したときだけ持つ
+     */
+    refreshTokenExpiresAt?: number
 }
 
-type TokenState = Partial<Record<TokenProvider, StoredTokens>>
+export type TokenState = Partial<Record<TokenProvider, StoredTokens>>
 
 export interface RefreshResult {
     accessToken: string
@@ -29,12 +34,19 @@ export interface RefreshResult {
     refreshToken?: string
     /** アクセストークンの有効期間（秒） */
     expiresInSeconds?: number
+    /** リフレッシュトークンの失効予定（epoch ミリ秒）。返らなければ保存済みの値を持ち越す */
+    refreshTokenExpiresAt?: number
 }
 
 export interface AccessToken {
     accessToken: string
     /** この呼び出しで更新して得たものなら true。保存済みの使い回しなら false */
     refreshed: boolean
+    /**
+     * リフレッシュトークンの失効予定（epoch ミリ秒）。更新しなかった回も保存済みの値を返す
+     * （アクセストークンが有効な間は更新が走らず、応答から期限を得られないため）
+     */
+    refreshTokenExpiresAt?: number
 }
 
 export interface GetAccessTokenOptions {
@@ -58,7 +70,7 @@ export class RefreshTokenRevokedError extends Error {
 
     constructor(providerName: string, envKey: string, detail: string) {
         super(
-            `リフレッシュトークンが失効しています。${providerName}へ再ログインして ${envKey} を更新してください`
+            `リフレッシュトークンが失効しています（有効期限切れの可能性があります）。${providerName}へ再ログインして ${envKey} を更新してください（手順はREADMEの「認証情報の取得方法」）`
         )
         this.name = "RefreshTokenRevokedError"
         this.detail = detail
@@ -95,7 +107,7 @@ function getStatePath(): string {
     return process.env.AI_USAGE_STATE_PATH || path.join(process.cwd(), ".data", "ai-usage-tokens.json")
 }
 
-async function readState(): Promise<TokenState> {
+export async function readState(): Promise<TokenState> {
     try {
         const raw = await fs.readFile(getStatePath(), "utf8")
         const parsed: unknown = JSON.parse(raw)
@@ -159,7 +171,11 @@ export async function getAccessToken(
         const invalidated = invalidate !== undefined && entry.accessToken === invalidate
 
         if (!invalidated && isFresh(entry)) {
-            return { accessToken: entry.accessToken as string, refreshed: false }
+            return {
+                accessToken: entry.accessToken as string,
+                refreshed: false,
+                refreshTokenExpiresAt: entry.refreshTokenExpiresAt,
+            }
         }
 
         let result: RefreshResult
@@ -176,6 +192,10 @@ export async function getAccessToken(
             result = await refresh(envRefreshToken)
         }
 
+        // 応答に期限が無い回は記録済みの値を持ち越す。env が差し替わったとき（再ログイン）は
+        // entry が作り直されているので、古い期限は引き継がれない
+        const refreshTokenExpiresAt = result.refreshTokenExpiresAt ?? entry.refreshTokenExpiresAt
+
         state[provider] = {
             seededFrom: envRefreshToken,
             refreshToken: result.refreshToken ?? entry.refreshToken,
@@ -184,9 +204,10 @@ export async function getAccessToken(
                 result.expiresInSeconds !== undefined
                     ? Date.now() + result.expiresInSeconds * 1000
                     : undefined,
+            refreshTokenExpiresAt,
         }
         await writeState(state)
 
-        return { accessToken: result.accessToken, refreshed: true }
+        return { accessToken: result.accessToken, refreshed: true, refreshTokenExpiresAt }
     })
 }
