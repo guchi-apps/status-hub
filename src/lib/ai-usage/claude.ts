@@ -96,6 +96,33 @@ interface TokenResponse {
     access_token?: string
     refresh_token?: string
     expires_in?: number
+    /**
+     * リフレッシュトークン自体の有効期間（秒）。ローテーションしても延びない絶対期限で、
+     * Claude Code 本体はこれを `refreshTokenExpiresAt` として保存している（#641）。
+     * 項目名は公開されていないため、時刻で返る形（`refresh_token_expires_at`）も受ける
+     */
+    refresh_token_expires_in?: number
+    refresh_token_expires_at?: number | string
+}
+
+/** トークン応答からリフレッシュトークンの失効予定（epoch ミリ秒）を読む。無い・解釈できなければ undefined */
+export function parseRefreshTokenExpiresAt(data: TokenResponse, now = Date.now()): number | undefined {
+    const seconds = data.refresh_token_expires_in
+    if (typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0) {
+        return now + seconds * 1000
+    }
+
+    const at = data.refresh_token_expires_at
+    if (typeof at === "number" && Number.isFinite(at) && at > 0) {
+        // 秒とミリ秒のどちらで返っても読めるようにする（1e12 未満なら秒とみなす）
+        return at < 1e12 ? at * 1000 : at
+    }
+    if (typeof at === "string") {
+        const parsed = Date.parse(at)
+        if (Number.isFinite(parsed)) return parsed
+    }
+
+    return undefined
 }
 
 function userAgent(): string {
@@ -151,6 +178,7 @@ async function refreshAccessToken(refreshToken: string): Promise<RefreshResult> 
             accessToken: data.access_token,
             refreshToken: data.refresh_token,
             expiresInSeconds: data.expires_in,
+            refreshTokenExpiresAt: parseRefreshTokenExpiresAt(data),
         }
     }
 
@@ -182,6 +210,12 @@ export async function resolveClaudeAccessToken(
  */
 export function shouldRetryAfterUnauthorized(status: number, token: AccessToken): boolean {
     return status === 401 && !token.refreshed
+}
+
+/** カードへ載せるリフレッシュトークンの失効予定。記録が無ければ何も足さない */
+function refreshTokenExpiry(token: AccessToken | null): Pick<AiProviderUsage, "refreshTokenExpiresAt"> {
+    const at = token?.refreshTokenExpiresAt
+    return typeof at === "number" ? { refreshTokenExpiresAt: new Date(at).toISOString() } : {}
 }
 
 const FIVE_HOUR_SECONDS = 5 * 60 * 60
@@ -393,6 +427,7 @@ async function fetchClaudeUsage(): Promise<ProviderFetchResult> {
                     ...base,
                     status: "error",
                     denied: isPermissionStatus(res.status) || undefined,
+                    ...refreshTokenExpiry(token),
                     message:
                         res.status === 429
                             ? "レート制限中のため取得できませんでした"
@@ -420,7 +455,10 @@ async function fetchClaudeUsage(): Promise<ProviderFetchResult> {
             }
         }
 
-        return { usage: { ...base, status: "ok", windows, credit }, raw }
+        return {
+            usage: { ...base, status: "ok", windows, credit, ...refreshTokenExpiry(token) },
+            raw,
+        }
     } catch (error) {
         console.error("Claude usage: 取得に失敗", error)
         return { usage: { ...base, status: "error", message: "使用状況の取得に失敗しました" } }

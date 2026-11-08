@@ -202,6 +202,11 @@ export interface AiProviderUsage {
     windowHistory?: AiUsageWindowHistory[]
     /** 週間枠が5時間枠の何倍か（Claudeのみ）。記録がまだ無ければ省略される */
     weeklyMultiple?: AiWeeklyMultiple
+    /**
+     * リフレッシュトークン自体の失効予定（ISO 8601）。提供元がトークン更新の応答で返したときだけ付く。
+     * 過ぎると再ログインしてトークンを差し替えるしかない（#641）
+     */
+    refreshTokenExpiresAt?: string
 }
 
 export interface AiUsageSnapshot {
