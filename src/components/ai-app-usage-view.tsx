@@ -6,7 +6,6 @@ import { SectionHeading } from "@/components/section-heading"
 import { Button } from "@/components/ui/button"
 import { findModel, modelLabel } from "@/lib/ai-app-usage/models"
 import { modelColor } from "@/lib/ai-app-usage/model-colors"
-import { countStates, resolvePurposes, type AiPurposeRow, type AiPurposeState } from "@/lib/ai-app-usage/purposes"
 import {
     appMetric,
     sortAppsByMetric,
@@ -453,57 +452,6 @@ function ModelPanel({ models, period, apps }: { models: ModelSummary[]; period: 
     )
 }
 
-const PURPOSE_STATE: Record<AiPurposeState, { text: string; className: string; hint: string }> = {
-    measured: { text: "計測中", className: "bg-status-ok/15 text-status-ok", hint: "上の一覧に表示" },
-    failed: { text: "取得不可", className: "bg-destructive/15 text-destructive", hint: "連携先から取得できていない" },
-    unlinked: { text: "未連携", className: "bg-amber-500/15 text-amber-400", hint: "使用量APIを読めていない" },
-    quota: { text: "枠のみ", className: "bg-muted text-muted-foreground", hint: "利用枠のカードで確認" },
-}
-
-function PurposeItem({ row }: { row: AiPurposeRow }) {
-    const state = PURPOSE_STATE[row.state]
-    return (
-        <li className="ai-purpose-row border-t border-border px-4 py-2.5 text-xs first:border-t-0">
-            <span data-area="name" className="truncate text-sm font-medium">
-                {row.app}
-            </span>
-            <span data-area="label" className="text-muted-foreground">
-                {row.label}
-            </span>
-            <span data-area="prov" className="text-muted-foreground">
-                {row.provider}
-                <span className="block text-[11px]">{state.hint}</span>
-            </span>
-            <span data-area="state" className={cn("whitespace-nowrap rounded-full px-2 py-px text-[11px]", state.className)}>
-                {state.text}
-            </span>
-        </li>
-    )
-}
-
-/** AIを使っている用途の一覧。使用量を読めていないものを見つけるための区画 */
-function PurposeList({ rows }: { rows: AiPurposeRow[] }) {
-    const groups: { title: string; rows: AiPurposeRow[] }[] = [
-        { title: "アプリが呼ぶAI（API課金）", rows: rows.filter((row) => row.kind === "metered") },
-        { title: "サブスクの枠を使うAI（アプリ別には数えられない）", rows: rows.filter((row) => row.kind === "quota") },
-    ]
-
-    return (
-        <>
-            {groups.map((group) => (
-                <div key={group.title}>
-                    <p className="bg-muted px-4 py-1.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{group.title}</p>
-                    <ul>
-                        {group.rows.map((row) => (
-                            <PurposeItem key={row.app} row={row} />
-                        ))}
-                    </ul>
-                </div>
-            ))}
-        </>
-    )
-}
-
 /** 取得済みのスナップショットを描く部分。取得（`useDashboardData`）から切り離してあり、画面確認で作り物の値を渡せる */
 export function AiAppUsageView({
     snapshot,
@@ -533,8 +481,6 @@ export function AiAppUsageView({
     const models = summarizeModels(snapshot.apps, period)
     const ok = snapshot.apps.filter((app) => app.status === "ok")
     const failedCount = snapshot.apps.length - ok.length
-    const purposes = resolvePurposes(snapshot.apps)
-    const counts = countStates(purposes)
 
     return (
         <section className="space-y-2.5 sm:space-y-3">
@@ -560,18 +506,6 @@ export function AiAppUsageView({
 
             <Disclosure title="使用中のモデル" summary={`${models.length} 種`}>
                 <ModelPanel models={models} period={period} apps={snapshot.apps} />
-            </Disclosure>
-            <Disclosure
-                title="AIの用途一覧"
-                summary={(["measured", "failed", "unlinked", "quota"] as const)
-                    .filter((key) => counts[key] > 0)
-                    .map((key) => (
-                        <span key={key} className={cn("rounded-full px-2 py-px", PURPOSE_STATE[key].className)}>
-                            {PURPOSE_STATE[key].text} {counts[key]}
-                        </span>
-                    ))}
-            >
-                <PurposeList rows={purposes} />
             </Disclosure>
 
             <p className="text-[11px] text-muted-foreground">
