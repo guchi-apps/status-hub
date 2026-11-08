@@ -190,27 +190,3 @@
     grid-template-areas: "feat model calls tok cost";
   }
 }
-
-/* AIの用途一覧（#415）。〜767pxは「アプリ・状態 / 用途 / 提供元」の3段、768px以上は4列 */
-.ai-purpose-row {
-  display: grid;
-  align-items: center;
-  column-gap: 0.875rem;
-  row-gap: 0.25rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "name state"
-    "label label"
-    "prov prov";
-}
-.ai-purpose-row > [data-area="name"] { grid-area: name; }
-.ai-purpose-row > [data-area="state"] { grid-area: state; justify-self: end; }
-.ai-purpose-row > [data-area="label"] { grid-area: label; }
-.ai-purpose-row > [data-area="prov"] { grid-area: prov; }
-
-@media (min-width: 48rem) {
-  .ai-purpose-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.2fr) 5.5rem;
-    grid-template-areas: "name label prov state";
-  }
-}

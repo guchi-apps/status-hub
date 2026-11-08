@@ -282,11 +282,6 @@ AIDEタブは `aide.gucchii.com/status` と同じ内容を、AIDEの `GET /api/s
   取得の経路は、`node` で `127.0.0.1` に `Authorization: Bearer` を検証する疑似の連携先を立て、
   `AI_APP_USAGE_SOURCES` と `OPS_API_TOKEN` を渡した `npm run dev` へ `curl` する（成功・形式不正・接続失敗の各行を作れる）
 
-**「AIの用途一覧」は手で保守する登録簿**（`src/lib/ai-app-usage/purposes.ts` の `AI_PURPOSES`。#415）。
-他リポジトリのAI呼び出しは実行時に検出できないため、AIを使う機能が増えたらここへ足す。状態は
-スナップショットの `apps` に同名のアプリがあるか・`status` が `ok` か（計測中・取得不可・未連携）で決まり（環境変数ではなく取得結果で判定するため、issue-deckのTypeSafe補完も計測中になる）、`kind: "quota"` は常に「枠のみ」。
-`app` は `AI_APP_USAGE_SOURCES` のアプリ名と同じ綴りにする。
-
 ## AI利用枠のクレジット（サブスク外）
 
 サブスクの制限枠とは別会計の「クレジット枠」は、**両方とも使用状況のレスポンスに同居している**。
