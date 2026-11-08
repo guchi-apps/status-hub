@@ -59,15 +59,6 @@ function MonitorUrl({ url }: { url?: string }) {
     )
 }
 
-/** 表示名を変えているカードに添える、提供元の名前 */
-export function OriginalName({ name }: { name: string }) {
-    return (
-        <p className="min-w-0 truncate text-[11px] text-muted-foreground" title={name}>
-            <span className="mr-1 rounded border border-orange-500 px-1 text-[10px]">変更済み</span>元: {name}
-        </p>
-    )
-}
-
 export function UptimeKumaDashboardCard({ monitor }: { monitor: UptimeKumaMonitor }) {
     return (
         <DashboardCard className="h-full flex flex-col gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
@@ -85,7 +76,6 @@ export function UptimeKumaDashboardCard({ monitor }: { monitor: UptimeKumaMonito
                     />
                 </span>
             </div>
-            {monitor.originalName && <OriginalName name={monitor.originalName} />}
             <MonitorUrl url={monitor.url} />
             <HeartbeatBar statuses={monitor.recentStatuses} />
             <div className="flex items-center justify-between text-[11px] sm:text-xs text-muted-foreground">
