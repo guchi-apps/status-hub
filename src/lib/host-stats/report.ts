@@ -1,6 +1,7 @@
 import type {
     HostStatsApps,
     HostStatsDisk,
+    HostStatsDiskWatch,
     HostStatsMaintenance,
     HostStatsProcess,
     HostStatsRate,
@@ -29,6 +30,7 @@ const MAX_TMUX_SESSIONS = 20
 const MAX_TMUX_COMMANDS = 4
 const MAX_APPS = 30
 const MAX_SENSORS = 10
+const MAX_DISK_WATCH = 10
 const MAX_TEXT_LENGTH = 120
 
 /** ホスト識別子に使える文字。保存先のディレクトリ名になるため、パス区切りなどを通さない */
@@ -292,6 +294,30 @@ function parseApps(value: unknown): HostStatsApps | undefined {
 }
 
 /**
+ * 場所別のディスク使用量（#652）。
+ * `HOST_STATS_DISK_WATCH_PATHS` を設定していない・まだ測っていないホストは項目ごと送ってこないため、undefined を通す。
+ * 測れなかった場所の null は 0 と取り違えないよう null のまま残す（画面では「—」）。
+ */
+function parseDiskWatch(value: unknown): HostStatsDiskWatch | undefined {
+    if (value === undefined || value === null) return undefined
+    const record = asRecord(value, "diskWatch")
+    const items = record.items
+    if (!Array.isArray(items)) fail("diskWatch.items が配列ではありません")
+
+    return {
+        items: items.slice(0, MAX_DISK_WATCH).map((entry, index) => {
+            const item = asRecord(entry, `diskWatch.items[${index}]`)
+            return {
+                path: asText(item.path, `diskWatch.items[${index}].path`),
+                bytes: asOptionalCount(item.bytes, `diskWatch.items[${index}].bytes`) ?? null,
+            }
+        }),
+        disk: record.disk === undefined || record.disk === null ? undefined : parseUsage(record.disk, "diskWatch.disk"),
+        measuredAt: asOptionalTimestamp(record.measuredAt, "diskWatch.measuredAt"),
+    }
+}
+
+/**
  * センサーの取得状況（#581）。
  * `HOST_STATS_SENSOR_STATUS_FILE` を設定していないホストは項目ごと送ってこないため、undefined を通す。
  * 時刻は鮮度の判定に使うため、日時として読めない値は落とす（壊れた値で「最新」に見せない）。
@@ -379,6 +405,7 @@ export function parseHostStatsReport(input: unknown): HostStatsReport & { id: st
         tmuxSessions: parseTmuxSessions(record.tmuxSessions),
         tmuxSessionTotal: asOptionalCount(record.tmuxSessionTotal, "tmuxSessionTotal"),
         apps: parseApps(record.apps),
+        diskWatch: parseDiskWatch(record.diskWatch),
         services: parseServices(record.services),
         timers: parseTimers(record.timers),
         sensors: parseSensors(record.sensors),
