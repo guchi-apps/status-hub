@@ -1,0 +1,25 @@
+# 場所別のディスク使用量（HOST_STATS_DISK_WATCH_PATHS）を測ってキャッシュへ書く（#652）。
+#
+# 毎分の送信（ops-dashboard-host-stats.service）とは分けてある。du が数分かかる場所があり、
+# 送信の中で測るとその間メトリクスが届かず、ホスト停止と判定されるため。送信側は
+# ここが StateDirectory に残したキャッシュを読むだけ。Type=oneshot は本体が終わると
+# 残ったプロセスを止めるので、送信側から & で裏に回す形にはできない。
+[Unit]
+Description=ops-dashboard へ送る場所別のディスク使用量を測る
+Documentation=https://github.com/guchi-apps/status-hub
+After=local-fs.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/ops-dashboard-host-stats.env
+ExecStart=/opt/ops-dashboard-host-stats/agent.sh --measure-disk
+# 1か所ごとに HOST_STATS_DISK_WATCH_TIMEOUT（既定900秒）で打ち切るので、全体はその件数倍が上限
+TimeoutStartSec=3h
+Nice=19
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+PrivateTmp=no
+ProtectHome=read-only
+ProtectSystem=strict
+# 送信側と同じ置き場。キャッシュ（disk-watch.tsv）をここで受け渡す
+StateDirectory=ops-dashboard-host-stats

@@ -1,6 +1,6 @@
 "use client"
 
-import { AppDiskBreakdown, AppMemoryBreakdown } from "@/components/app-resources"
+import { AppDiskBreakdown, AppMemoryBreakdown, DiskWatchBreakdown } from "@/components/app-resources"
 import { SENSOR_TONES } from "@/components/host-card"
 import { getTemperatureColor, getUsageColor, NEUTRAL_METRIC_COLORS } from "@/components/metric-card"
 import { Sparkline } from "@/components/sparkline"
@@ -428,6 +428,7 @@ export function HostDetailBody({
                     hours={hours}
                 />
                 <AppDiskBreakdown apps={latest.apps} />
+                <DiskWatchBreakdown diskWatch={latest.diskWatch} />
                 <Section title="その他のディスク">
                     {otherDisks.length === 0 ? (
                         <p className="text-xs text-muted-foreground">他のディスクはありません。</p>
