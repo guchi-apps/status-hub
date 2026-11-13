@@ -33,8 +33,18 @@
 #                           1行1センサーの「名前<TAB>最終試行(epoch秒)<TAB>最終成功(epoch秒)<TAB>結果」。
 #                           記録の無い時刻は 0、結果は - で埋める（タブ区切りの空欄は read で潰れるため）。
 #                           未設定なら項目ごと送らない。設定したのに読めなければ available:false で送る
+#   HOST_STATS_DISK_WATCH_PATHS
+#                           任意。ディスク使用量を場所別に見たいディレクトリをカンマ区切りの絶対パスで（#652）。
+#                           アプリの置き場の外で膨らむキャッシュ（/tmp/node-compile-cache・~/.npm など）を
+#                           画面に出すためのもの。測るのは `--measure-disk`（計測専用のtimer）で、毎分の送信は
+#                           その結果のキャッシュを読むだけ。未設定なら項目ごと送らない
+#   HOST_STATS_DISK_WATCH_TIMEOUT
+#                           任意。`--measure-disk` で1か所の du に掛けてよい秒数（既定: 900）。
+#                           超えた場所は「測れなかった」（null）として送る
 #
 # `--print` を付けて実行すると、送信せずに組み立てたJSONを表示する（設置時の確認用）。
+# `--measure-disk` を付けて実行すると、HOST_STATS_DISK_WATCH_PATHS の各場所を du してキャッシュへ
+# 書くだけで送信はしない（ops-dashboard-host-stats-disk.timer から1時間ごとに呼ぶ）。
 
 set -euo pipefail
 
@@ -67,6 +77,9 @@ TMUX_SHELL_COMMANDS="bash zsh sh fish dash ksh csh tcsh"
 # アプリ別リソースで送るアプリ数の上限。ダッシュボード側の上限と合わせる
 MAX_APPS=30
 
+# 場所別のディスク使用量で送る場所の上限。ダッシュボード側の上限と合わせる
+MAX_DISK_WATCH=10
+
 : "${OPS_DASHBOARD_URL:?OPS_DASHBOARD_URL が未設定です}"
 : "${HOST_STATS_TOKEN:?HOST_STATS_TOKEN が未設定です}"
 DISK_PATHS="${HOST_STATS_DISK_PATHS:-/}"
@@ -78,6 +91,8 @@ SESSION_STATE_SUBDIR="${HOST_STATS_SESSION_STATE_SUBDIR:-.local/state/issue-deck
 APPS_ROOT="${HOST_STATS_APPS_ROOT:-}"
 APP_DISK_INTERVAL="${HOST_STATS_APP_DISK_INTERVAL:-3600}"
 SENSOR_STATUS_FILE="${HOST_STATS_SENSOR_STATUS_FILE:-}"
+DISK_WATCH_PATHS="${HOST_STATS_DISK_WATCH_PATHS:-}"
+DISK_WATCH_TIMEOUT="${HOST_STATS_DISK_WATCH_TIMEOUT:-900}"
 # ディスク使用量のキャッシュの置き場。ユニットの StateDirectory= が STATE_DIRECTORY を渡してくる
 APP_DISK_CACHE_DIR="${STATE_DIRECTORY:-/var/lib/ops-dashboard-host-stats}"
 
@@ -545,6 +560,86 @@ collect_apps() {
     printf '}'
 }
 
+# 場所別のディスク使用量（#652）のキャッシュ。1行目が計測時刻（epoch秒）、2行目以降が
+# 「パス<TAB>バイト数」で、測れなかった場所のバイト数は - にする
+disk_watch_cache() {
+    printf '%s/disk-watch.tsv' "$APP_DISK_CACHE_DIR"
+}
+
+# HOST_STATS_DISK_WATCH_PATHS を1行1パスにして返す。絶対パス以外と空欄は捨て、上限で切る
+disk_watch_paths() {
+    printf '%s' "$DISK_WATCH_PATHS" | tr ',' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
+        awk -v max="$MAX_DISK_WATCH" '/^\// && !seen[$0]++ && count < max { print; count++ }'
+}
+
+# `--measure-disk` の本体。**毎分の送信とは別のプロセス（専用のtimer）で走らせる。**
+# 188万ファイルを抱えた /tmp/node-compile-cache のように du が数分かかる場所があり、送信の中で
+# 測ると、その間メトリクスが届かずホスト停止と判定されるため（#652 の計画レビュー）。
+# 1か所ずつ timeout を掛け、超えた・存在しない場所は - として残す。読めないファイルがあると du は
+# 非0で終わるが、読めた分の合計は出るのでそれを使う（app_disk_tsv と同じ扱い）
+measure_disk_watch() {
+    local cache tmp path output status bytes
+    [ -n "$DISK_WATCH_PATHS" ] || { echo "HOST_STATS_DISK_WATCH_PATHS が未設定のため測りません" >&2; return 0; }
+
+    cache="$(disk_watch_cache)"
+    mkdir -p "$APP_DISK_CACHE_DIR"
+    tmp="$cache.tmp"
+
+    {
+        date +%s
+        while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            bytes="-"
+            if [ -e "$path" ]; then
+                status=0
+                output="$(low_priority timeout "$DISK_WATCH_TIMEOUT" du -s -B1 -x "$path" 2>/dev/null)" || status=$?
+                # 124 は timeout で打ち切った（途中までの合計は過小なので使わない）
+                if [ "$status" -ne 124 ]; then
+                    bytes="$(printf '%s\n' "$output" | awk 'NF >= 1 && $1 ~ /^[0-9]+$/ { total = $1 } END { if (total != "") print total }')"
+                    [ -n "$bytes" ] || bytes="-"
+                fi
+            fi
+            printf '%s\t%s\n' "$path" "$bytes"
+        done < <(disk_watch_paths)
+    } >"$tmp"
+    mv "$tmp" "$cache"
+}
+
+# 場所別のディスク使用量を、`--measure-disk` が残したキャッシュから組み立てる。ここでは du を走らせない。
+# 未設定・まだ測っていない（キャッシュが無い）ときは何も返さず、項目ごと送らない。
+# 設定から外した場所はキャッシュに残っていても送らない
+collect_disk_watch() {
+    local cache measured items disk_fields first_path
+    [ -n "$DISK_WATCH_PATHS" ] || return 0
+    cache="$(disk_watch_cache)"
+    [ -r "$cache" ] || return 0
+
+    measured="$(head -n 1 "$cache" 2>/dev/null || true)"
+    [[ "$measured" =~ ^[0-9]+$ ]] || return 0
+
+    items="$(
+        awk -F '\t' '
+            FNR == NR { wanted[$0] = 1; next }
+            FNR == 1 { next }
+            NF >= 2 && ($1 in wanted) {
+                path = $1
+                gsub(/[\\"]/, "", path)
+                gsub(/[[:cntrl:]]/, "", path)
+                printf "%s{\"path\":\"%s\",\"bytes\":%s}", (count++ ? "," : ""), path, ($2 ~ /^[0-9]+$/ ? $2 : "null")
+            }
+        ' <(disk_watch_paths) "$cache"
+    )"
+    [ -n "$items" ] || return 0
+
+    printf '{"items":[%s],"measuredAt":"%s"' "$items" "$(date -u -d "@$measured" +%Y-%m-%dT%H:%M:%SZ)"
+
+    # 内訳バーの分母。最初の場所が載っているファイルシステムで取る（場所ごとにマウントが違っても1本で描くため）
+    first_path="$(disk_watch_paths | head -n 1)" || true
+    disk_fields="$(df -B1 -P "$first_path" 2>/dev/null | awk 'NR == 2 { print $2, $3 }')" || disk_fields=""
+    [ -z "$disk_fields" ] || printf ',"disk":%s' "$(usage_json "${disk_fields##* }" "${disk_fields%% *}")"
+    printf '}'
+}
+
 # センサーの最大件数。ダッシュボード側の上限と合わせる
 MAX_SENSORS=10
 
@@ -1001,7 +1096,7 @@ os_name() {
 }
 
 build_payload() {
-    local swap temperature tmux_output tmux_sessions tmux_total timers apps sensors cpu_model cpu_threads
+    local swap temperature tmux_output tmux_sessions tmux_total timers apps disk_watch sensors cpu_model cpu_threads
     collect_samples
     swap="$(collect_swap)"
     temperature="$(collect_temperature)"
@@ -1017,6 +1112,9 @@ build_payload() {
 
     # HOST_STATS_APPS_ROOT 未設定のホストでは空になり、項目ごと送らない
     apps="$(collect_apps)"
+
+    # HOST_STATS_DISK_WATCH_PATHS 未設定・未計測のホストでは空になり、項目ごと送らない
+    disk_watch="$(collect_disk_watch)"
 
     sensors="$(collect_sensors)"
 
@@ -1048,6 +1146,7 @@ build_payload() {
     [ -z "$tmux_sessions" ] || printf '"tmuxSessions":%s,' "$tmux_sessions"
     [ -z "$tmux_sessions" ] || printf '"tmuxSessionTotal":%d,' "$tmux_total"
     [ -z "$apps" ] || printf '"apps":%s,' "$apps"
+    [ -z "$disk_watch" ] || printf '"diskWatch":%s,' "$disk_watch"
     printf '"services":%s' "$(collect_services)"
     [ -z "$timers" ] || printf ',"timers":%s' "$timers"
     [ -z "$sensors" ] || printf ',"sensors":%s' "$sensors"
@@ -1100,6 +1199,12 @@ close_requested_sessions() {
 
 main() {
     local payload response status body
+
+    if [ "${1:-}" = "--measure-disk" ]; then
+        measure_disk_watch
+        return 0
+    fi
+
     payload="$(build_payload)"
 
     # 設置時の確認用。送信はせずJSONだけ出す

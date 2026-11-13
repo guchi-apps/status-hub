@@ -153,6 +153,26 @@ Prometheus + Grafana は、VPSがメモリ2GBでNext.jsを10本抱えている�
 
 既に設置済みのホストで有効にするには、`agent.sh` とユニットファイルを配り直し、`/etc/ops-dashboard-host-stats.env` に `HOST_STATS_APPS_ROOT` を追記する（手順は下記「tmuxセッション一覧」末尾の配り直しと同じ）。
 
+### 場所別のディスク使用量
+
+ホストのディスク詳細に、`HOST_STATS_DISK_WATCH_PATHS`（カンマ区切りの絶対パス・最大10か所）で指定した場所ごとの使用量を出す（[issue #652](https://github.com/guchi-apps/status-hub/issues/652)）。
+アプリ別（`HOST_STATS_APPS_ROOT`）はアプリの置き場の中しか測れず、サブPCのルートFSが90%に達したときの主因（`/tmp/node-compile-cache` 14G・`~/.npm` 11G）が画面に出なかったため。
+
+- **測るのは毎分の送信ではなく、計測専用の `ops-dashboard-host-stats-disk.timer`（1時間ごと）。** 188万ファイルを抱えた場所の `du` は数分かかり、送信の中で測るとその間メトリクスが届かずホスト停止と判定される。`agent.sh --measure-disk` が `/var/lib/ops-dashboard-host-stats/disk-watch.tsv` へ書き、送信はそれを読むだけ。`Type=oneshot` は本体の終了時に残ったプロセスを止めるため、送信側から `&` で裏に回す形にはできない
+- 1か所ごとに `HOST_STATS_DISK_WATCH_TIMEOUT`（既定900秒）で打ち切る。打ち切った・存在しない場所は画面で「—」になる（途中までの合計は過小なので使わない）
+- 内訳バーの分母は、最初に書いた場所が載っているファイルシステムの容量
+- 削除はしない。掃除は `guchi-apps/subpc` の tmpfiles 規則（キャッシュ）と issue-deck の `cleanup-worktrees.sh`（worktree）が受け持つ
+
+有効にするには、`agent.sh` と新しいユニットを配り、env に `HOST_STATS_DISK_WATCH_PATHS` を足す。
+
+```bash
+sudo cp "$SRC/agent.sh" /opt/ops-dashboard-host-stats/
+sudo cp "$SRC"/ops-dashboard-host-stats-disk.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ops-dashboard-host-stats-disk.timer
+sudo systemctl start ops-dashboard-host-stats-disk.service   # 初回の計測（数分かかる）
+```
+
 ### tmuxセッション一覧
 
 サブPCはClaude Codeの作業セッションを常駐させるホストで、リポジトリをまたいだセッションが同じ `tmux ls` に並ぶ（セッション名は issue-deck 側で `<リポジトリ名>-issue-<番号>` に統一している）。

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { formatAge, formatBytes } from "@/lib/host-stats/format"
 import { cn } from "@/lib/utils"
-import type { HostStatsApps, HostStatsUsage } from "@/types/host-stats"
+import type { HostStatsApps, HostStatsDiskWatch, HostStatsUsage } from "@/types/host-stats"
 
 /** 狭い画面で最初に出す件数。残りは「他 N件を表示」で開く */
 const COLLAPSED_ROWS = 6
@@ -38,7 +38,8 @@ function measuredAgeSeconds(measuredAt?: string): number | undefined {
 
 /**
  * メモリかディスクの片方。上に「アプリ合計 / アプリ以外 / 空き」の内訳バー、
- * 下にアプリごとの横棒を大きい順に並べる。
+ * 下にアプリごとの横棒を大きい順に並べる。「アプリ」の呼び名は partLabel で差し替えられる
+ * （場所別のディスク内訳では「指定した場所」。#652）。
  *
  * 横棒の長さは最大のアプリを基準にする。1アプリはホスト全体の数%にしかならず、
  * 全体を分母にすると棒がどれも短くて差が読めないため。全体に対する割合は右端の％で出す。
@@ -50,6 +51,7 @@ function ResourceBlock({
     usage,
     stamp,
     barClassName,
+    partLabel = "アプリ",
 }: {
     label: string
     /** ％の分母の呼び名（「メモリ総量」など） */
@@ -58,6 +60,8 @@ function ResourceBlock({
     usage: HostStatsUsage
     stamp?: string
     barClassName: string
+    /** 行の合計の呼び名。内訳バーの凡例は「{partLabel}」「{partLabel}以外」になる */
+    partLabel?: string
 }) {
     const [expanded, setExpanded] = useState(false)
 
@@ -78,7 +82,7 @@ function ResourceBlock({
                 </span>
                 <span className="font-mono text-base font-bold tabular-nums">{formatBytes(appsBytes)}</span>
                 <span className="text-xs text-muted-foreground">
-                    アプリ合計 / {formatBytes(usage.totalBytes)}
+                    {partLabel}合計 / {formatBytes(usage.totalBytes)}
                 </span>
                 {stamp && <span className="ml-auto text-[10px] text-muted-foreground">{stamp}</span>}
             </div>
@@ -86,7 +90,7 @@ function ResourceBlock({
             <div
                 className="flex h-3.5 gap-0.5 overflow-hidden rounded bg-muted"
                 role="img"
-                aria-label={`${totalLabel}の内訳: アプリ ${formatBytes(appsBytes)}、アプリ以外 ${formatBytes(otherBytes)}、空き ${formatBytes(freeBytes)}`}
+                aria-label={`${totalLabel}の内訳: ${partLabel} ${formatBytes(appsBytes)}、${partLabel}以外 ${formatBytes(otherBytes)}、空き ${formatBytes(freeBytes)}`}
             >
                 <span
                     className={cn("h-full", barClassName)}
@@ -103,7 +107,7 @@ function ResourceBlock({
             <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-[10px] text-muted-foreground sm:text-[11px]">
                 <span className="inline-flex items-center gap-1.5">
                     <span className={cn("size-2.5 rounded-sm", barClassName)} />
-                    アプリ
+                    {partLabel}
                     <span className="font-mono font-semibold text-foreground">
                         {Math.round(percentOf(appsInUsage, usage.totalBytes))}%
                     </span>
@@ -113,7 +117,7 @@ function ResourceBlock({
                         className={cn("size-2.5 rounded-sm border border-current", HATCH_CLASS)}
                         style={HATCH_STYLE}
                     />
-                    アプリ以外
+                    {partLabel}以外
                     <span className="font-mono font-semibold text-foreground">
                         {Math.round(percentOf(otherBytes, usage.totalBytes))}%
                     </span>
@@ -263,6 +267,60 @@ export function AppDiskBreakdown({ apps }: { apps?: HostStatsApps }) {
             />
             <p className={FOOTNOTE_CLASS}>
                 各アプリのディレクトリの使用量（node_modules・ビルド成果物を含む）。{apps.root} 配下をアプリ単位で集計。
+            </p>
+        </div>
+    )
+}
+
+/**
+ * 場所別のディスク内訳（#652）。ディスク詳細の中、アプリ別の下に置く。
+ *
+ * アプリの置き場の外で膨らむキャッシュ（/tmp/node-compile-cache・~/.npm など）を見るためのもの。
+ * エージェントが送ってこない（HOST_STATS_DISK_WATCH_PATHS 未設定・未計測）ホストでは何も出さない。
+ * 測れなかった場所（存在しない・時間内に終わらなかった）は 0 と見分けられるよう「—」で別に並べる。
+ */
+export function DiskWatchBreakdown({ diskWatch }: { diskWatch?: HostStatsDiskWatch }) {
+    if (!diskWatch) return null
+
+    const label = "Disk · 場所別"
+    const rows: ResourceRow[] = diskWatch.items
+        .flatMap((item) => (item.bytes === null ? [] : [{ name: item.path, bytes: item.bytes }]))
+        .sort((a, b) => b.bytes - a.bytes)
+    const unmeasured = diskWatch.items.filter((item) => item.bytes === null).map((item) => item.path)
+    const measuredAge = measuredAgeSeconds(diskWatch.measuredAt)
+
+    return (
+        <div className="space-y-3">
+            {diskWatch.disk && rows.length > 0 ? (
+                <ResourceBlock
+                    label={label}
+                    totalLabel="ディスク容量"
+                    rows={rows}
+                    usage={diskWatch.disk}
+                    stamp={measuredAge === undefined ? undefined : `計測 ${formatAge(measuredAge)}（1時間ごと）`}
+                    barClassName="bg-amber-400"
+                    partLabel="指定した場所"
+                />
+            ) : (
+                <EmptyBreakdown label={label} message="指定した場所はどれも測れていません。" />
+            )}
+            {unmeasured.length > 0 && (
+                <ul className="space-y-1 text-xs">
+                    {unmeasured.map((path) => (
+                        <li
+                            key={path}
+                            title={`${path}: 存在しないか、時間内に測り終わりませんでした`}
+                            className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-x-2 px-1 text-muted-foreground"
+                        >
+                            <span className="truncate">{path}</span>
+                            <span className="text-right font-mono">—</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+            <p className={FOOTNOTE_CLASS}>
+                エージェントの設定（HOST_STATS_DISK_WATCH_PATHS）で指定した場所ごとの使用量。場所が入れ子になっていると重ねて数える。
+                「—」は存在しないか、時間内に測り終わらなかった場所。
             </p>
         </div>
     )

@@ -121,6 +121,27 @@ export interface HostStatsApps {
     diskMeasuredAt?: string
 }
 
+/** 場所1つ分のディスク使用量（#652） */
+export interface HostStatsDiskWatchItem {
+    /** エージェントの設定（HOST_STATS_DISK_WATCH_PATHS）に書いた絶対パス */
+    path: string
+    /** 使用量。存在しない・時間内に測り終わらなかった場所は null */
+    bytes: number | null
+}
+
+/**
+ * 場所別のディスク使用量（#652）。アプリの置き場の外で膨らむキャッシュなどを見るためのもの。
+ * `HOST_STATS_DISK_WATCH_PATHS` を設定していない・まだ測っていないホストや、
+ * これを送らない世代のエージェントでは undefined。
+ */
+export interface HostStatsDiskWatch {
+    items: HostStatsDiskWatchItem[]
+    /** 最初の場所が載っているファイルシステムの使用量。内訳の分母に使う */
+    disk?: HostStatsUsage
+    /** 測った時刻（ISO 8601）。計測専用のtimerが1時間ごとに測る */
+    measuredAt?: string
+}
+
 /** 秒あたりの転送量。ネットワークとディスクI/Oで使う */
 export interface HostStatsRate {
     inBytesPerSecond: number
@@ -242,6 +263,7 @@ export interface HostStatsReport {
      */
     tmuxSessionTotal?: number
     apps?: HostStatsApps
+    diskWatch?: HostStatsDiskWatch
     services: HostStatsService[]
     /**
      * 定期ジョブ（systemd timer）の状態。

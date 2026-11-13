@@ -1,0 +1,11 @@
+[Unit]
+Description=ops-dashboard へ送る場所別のディスク使用量を1時間ごとに測る
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+# 計測の時刻がずれても困らないため、systemd にまとめて起こさせる
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target
