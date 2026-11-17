@@ -83,6 +83,8 @@ interface DashboardData extends DashboardInitialData {
     refreshAiUsage: () => Promise<boolean>
     /** アプリ別AI利用だけを、連携先の設定変更直後などに取り直す。 */
     refreshAiAppUsage: () => Promise<boolean>
+    /** ホストのメトリクスだけを取り直す。ディスクの掃除を依頼した直後に使う（#657） */
+    refreshHostStats: () => Promise<boolean>
 }
 
 const DashboardDataContext = createContext<DashboardData | null>(null)
@@ -202,6 +204,9 @@ export function DashboardDataProvider({
     const refreshAiAppUsageOnly = aiAppUsage.refresh
     const refreshAiAppUsage = useCallback(() => refreshAiAppUsageOnly(true), [refreshAiAppUsageOnly])
 
+    const refreshHostStatsOnly = hostStats.refresh
+    const refreshHostStats = useCallback(() => refreshHostStatsOnly(false), [refreshHostStatsOnly])
+
     const value = useMemo<DashboardData>(
         () => ({
             hostStats: hostStats.value,
@@ -230,8 +235,10 @@ export function DashboardDataProvider({
             refreshMonitors,
             refreshAiUsage,
             refreshAiAppUsage,
+            refreshHostStats,
         }),
         [
+            refreshHostStats,
             refreshUptimeKuma,
             refreshMonitors,
             refreshAiUsage,

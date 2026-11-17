@@ -131,3 +131,61 @@ export async function settleCloseRequests(
         return remaining.map((request) => `${request.user}|${request.name}`)
     })
 }
+
+/**
+ * 「放置セッションをまとめて閉じる」依頼（#657）。
+ *
+ * セッション単位の依頼（上）は、受信済みの一覧（先頭20件）に載っているものしか積めない。
+ * 21件以上あるホストで一覧の外に放置セッションがあると、画面から閉じられなくなるため、
+ * こちらは**対象を指さず「放置を全部閉じて」とだけ頼む**。何が放置かはエージェントが
+ * 自分で見て決める（デタッチ・コマンド停止・24時間以上動き無し。`TMUX_STALE_AFTER_SECONDS` と同じ規則）。
+ *
+ * 渡すのは依頼時刻だけ（ミリ秒の整数）。エージェントは処理した時刻を覚えて、同じ依頼を二度やらない。
+ * 結果の報告は受けず、期限（`CLOSE_REQUEST_TTL_MS`）で捨てる。
+ */
+function getStaleRequestPath(hostId: string): string {
+    return path.join(getHostDataDir(hostId), "close-stale-request.json")
+}
+
+async function readStaleRequest(hostId: string): Promise<number | null> {
+    try {
+        const parsed: unknown = JSON.parse(await fs.readFile(getStaleRequestPath(hostId), "utf8"))
+        const at = (parsed as { requestedAt?: unknown } | null)?.requestedAt
+        return typeof at === "number" && Number.isSafeInteger(at) && at > 0 ? at : null
+    } catch {
+        return null
+    }
+}
+
+/** 依頼を積む。生きている依頼があれば `exists`（積み直さない） */
+export async function enqueueCloseStaleRequest(
+    hostId: string,
+    now: number = Date.now()
+): Promise<"queued" | "exists"> {
+    assertHostId(hostId)
+
+    return serialize(async () => {
+        const current = await readStaleRequest(hostId)
+        if (current !== null && now - current < CLOSE_REQUEST_TTL_MS) return "exists"
+
+        await writeFileAtomic(getStaleRequestPath(hostId), `${JSON.stringify({ requestedAt: now })}\n`)
+        return "queued"
+    })
+}
+
+/** 受信のたびに呼ぶ。生きている依頼の時刻を返す（無ければ null）。期限切れは捨てる */
+export async function settleCloseStaleRequest(
+    hostId: string,
+    now: number = Date.now()
+): Promise<number | null> {
+    assertHostId(hostId)
+
+    return serialize(async () => {
+        const current = await readStaleRequest(hostId)
+        if (current === null) return null
+        if (now - current < CLOSE_REQUEST_TTL_MS) return current
+
+        await fs.rm(getStaleRequestPath(hostId), { force: true })
+        return null
+    })
+}
