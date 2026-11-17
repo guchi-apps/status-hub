@@ -142,6 +142,59 @@ export interface HostStatsDiskWatch {
     measuredAt?: string
 }
 
+/**
+ * ディスクの掃除の対象（#657）。消す場所と消し方はエージェント側に固定してあり、
+ * 画面とダッシュボードが扱うのはこのIDだけ（root で動くエージェントへパスを渡さないため）。
+ * 一覧と説明は `src/lib/host-stats/cleanup-targets.ts`。
+ */
+export type HostCleanupTargetId =
+    | "tmux-stale"
+    | "worktrees"
+    | "node-compile-cache"
+    | "npm-cache"
+    | "tmp-stale"
+    | "claude-scratch"
+
+/** 掃除の実行結果。1対象につき直近の1回だけを持つ */
+export interface HostStatsCleanupRun {
+    /** 依頼を受け付けた時刻（エポックミリ秒）。ダッシュボードの依頼と突き合わせる鍵 */
+    requestedAt: number
+    status: "running" | "ok" | "failed"
+    startedAt?: string
+    finishedAt?: string
+    /** ファイルシステムの空きが増えた量。並行して書き込みがあると多少ずれる */
+    freedBytes?: number
+    /** 消した項目の数。数えられない対象（worktree）では undefined */
+    count?: number
+    /** 失敗の理由など。エージェントが決まった文言だけを入れる */
+    message?: string
+}
+
+export interface HostStatsCleanupTarget {
+    id: HostCleanupTargetId
+    /** 消せる見込みの量（1時間ごとの計測）。測らない・測れなかった対象は null */
+    bytes: number | null
+    /** 消せる見込みの項目数。数えない対象は null */
+    count: number | null
+    lastRun?: HostStatsCleanupRun
+}
+
+/**
+ * ディスクの掃除（#657）。`HOST_STATS_CLEANUP_TARGETS` を設定したホストだけが送ってくる。
+ * 送ってこないホストでは undefined で、画面の「掃除」欄も出さない。
+ */
+export interface HostStatsCleanup {
+    targets: HostStatsCleanupTarget[]
+    /** 見込みを測った時刻（ISO 8601） */
+    measuredAt?: string
+}
+
+/** ダッシュボードに積まれていて、まだ終わっていない掃除の依頼 */
+export interface HostCleanupPending {
+    target: HostCleanupTargetId
+    requestedAt: number
+}
+
 /** 秒あたりの転送量。ネットワークとディスクI/Oで使う */
 export interface HostStatsRate {
     inBytesPerSecond: number
@@ -264,6 +317,7 @@ export interface HostStatsReport {
     tmuxSessionTotal?: number
     apps?: HostStatsApps
     diskWatch?: HostStatsDiskWatch
+    cleanup?: HostStatsCleanup
     services: HostStatsService[]
     /**
      * 定期ジョブ（systemd timer）の状態。
@@ -338,6 +392,8 @@ export interface HostStatsHostView {
     history: HostStatsHistoryPoint[]
     /** センサーの取得状況の判定。センサーを送ってこないホストでは undefined */
     sensors?: HostSensorsView
+    /** 掃除の依頼のうち、まだ終わっていないもの（#657）。依頼が無ければ undefined */
+    cleanupPending?: HostCleanupPending[]
 }
 
 /** GET /api/host-stats のレスポンス */

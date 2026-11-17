@@ -1,5 +1,9 @@
+import { isCleanupTargetId } from "@/lib/host-stats/cleanup-targets"
 import type {
     HostStatsApps,
+    HostStatsCleanup,
+    HostStatsCleanupRun,
+    HostStatsCleanupTarget,
     HostStatsDisk,
     HostStatsDiskWatch,
     HostStatsMaintenance,
@@ -31,6 +35,7 @@ const MAX_TMUX_COMMANDS = 4
 const MAX_APPS = 30
 const MAX_SENSORS = 10
 const MAX_DISK_WATCH = 10
+const MAX_CLEANUP_TARGETS = 10
 const MAX_TEXT_LENGTH = 120
 
 /** ホスト識別子に使える文字。保存先のディレクトリ名になるため、パス区切りなどを通さない */
@@ -317,6 +322,57 @@ function parseDiskWatch(value: unknown): HostStatsDiskWatch | undefined {
     }
 }
 
+const CLEANUP_RUN_STATUSES = new Set(["running", "ok", "failed"])
+
+function parseCleanupRun(value: unknown, field: string): HostStatsCleanupRun | undefined {
+    if (value === undefined || value === null) return undefined
+    const record = asRecord(value, field)
+    const status = record.status
+    if (typeof status !== "string" || !CLEANUP_RUN_STATUSES.has(status)) return undefined
+
+    return {
+        requestedAt: Math.round(nonNegative(asNumber(record.requestedAt, `${field}.requestedAt`))),
+        status: status as HostStatsCleanupRun["status"],
+        startedAt: asOptionalTimestamp(record.startedAt, `${field}.startedAt`),
+        finishedAt: asOptionalTimestamp(record.finishedAt, `${field}.finishedAt`),
+        freedBytes: asOptionalCount(record.freedBytes, `${field}.freedBytes`),
+        count: asOptionalCount(record.count, `${field}.count`),
+        message: asOptionalText(record.message, `${field}.message`),
+    }
+}
+
+/**
+ * ディスクの掃除（#657）。設定していないホストは送ってこないため undefined を通す。
+ * 知らない対象（新しい世代のエージェントが足したもの）は捨てる。画面に説明が無く、依頼も受け付けないため
+ */
+function parseCleanup(value: unknown): HostStatsCleanup | undefined {
+    if (value === undefined || value === null) return undefined
+    const record = asRecord(value, "cleanup")
+    const targets = record.targets
+    if (!Array.isArray(targets)) fail("cleanup.targets が配列ではありません")
+
+    const seen = new Set<string>()
+    const parsed: HostStatsCleanupTarget[] = []
+    targets.slice(0, MAX_CLEANUP_TARGETS).forEach((entry, index) => {
+        const field = `cleanup.targets[${index}]`
+        const item = asRecord(entry, field)
+        if (!isCleanupTargetId(item.id) || seen.has(item.id)) return
+        seen.add(item.id)
+
+        parsed.push({
+            id: item.id,
+            bytes: asOptionalCount(item.bytes, `${field}.bytes`) ?? null,
+            count: asOptionalCount(item.count, `${field}.count`) ?? null,
+            lastRun: parseCleanupRun(item.lastRun, `${field}.lastRun`),
+        })
+    })
+
+    return {
+        targets: parsed,
+        measuredAt: asOptionalTimestamp(record.measuredAt, "cleanup.measuredAt"),
+    }
+}
+
 /**
  * センサーの取得状況（#581）。
  * `HOST_STATS_SENSOR_STATUS_FILE` を設定していないホストは項目ごと送ってこないため、undefined を通す。
@@ -406,6 +462,7 @@ export function parseHostStatsReport(input: unknown): HostStatsReport & { id: st
         tmuxSessionTotal: asOptionalCount(record.tmuxSessionTotal, "tmuxSessionTotal"),
         apps: parseApps(record.apps),
         diskWatch: parseDiskWatch(record.diskWatch),
+        cleanup: parseCleanup(record.cleanup),
         services: parseServices(record.services),
         timers: parseTimers(record.timers),
         sensors: parseSensors(record.sensors),

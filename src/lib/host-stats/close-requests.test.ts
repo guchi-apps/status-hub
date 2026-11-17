@@ -6,8 +6,10 @@ import type { TestContext } from "node:test"
 import {
     CLOSE_REQUEST_TTL_MS,
     enqueueCloseRequest,
+    enqueueCloseStaleRequest,
     isValidCloseTarget,
     settleCloseRequests,
+    settleCloseStaleRequest,
 } from "@/lib/host-stats/close-requests"
 import { redirectStateFile } from "@/lib/ai-usage/test-support"
 import type { HostStatsTmuxSession } from "@/types/host-stats"
@@ -103,5 +105,30 @@ describe("settleCloseRequests", () => {
         await enqueueCloseRequest("subpc", { user: "guchi", name: "a" }, [session("a")], NOW)
 
         assert.deepEqual(await settleCloseRequests("subpc", undefined, NOW + 1000), ["guchi|a"])
+    })
+})
+
+describe("放置セッションをまとめて閉じる依頼", () => {
+    it("セッションを指さず依頼時刻だけを積み、期限内は二重に積まない", async (t) => {
+        redirectDataDir(t)
+
+        assert.equal(await settleCloseStaleRequest("subpc", NOW), null)
+        assert.equal(await enqueueCloseStaleRequest("subpc", NOW), "queued")
+        assert.equal(await enqueueCloseStaleRequest("subpc", NOW + 1000), "exists")
+        assert.equal(await settleCloseStaleRequest("subpc", NOW + 60_000), NOW)
+    })
+
+    it("期限が切れたら捨て、積み直せる", async (t) => {
+        redirectDataDir(t)
+        await enqueueCloseStaleRequest("subpc", NOW)
+
+        assert.equal(await settleCloseStaleRequest("subpc", NOW + CLOSE_REQUEST_TTL_MS), null)
+        assert.equal(await enqueueCloseStaleRequest("subpc", NOW + CLOSE_REQUEST_TTL_MS + 1), "queued")
+    })
+
+    it("パスに繋げないホストIDを弾く", async (t) => {
+        redirectDataDir(t)
+        await assert.rejects(enqueueCloseStaleRequest("../etc", NOW))
+        await assert.rejects(settleCloseStaleRequest("../etc", NOW))
     })
 })

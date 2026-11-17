@@ -1,0 +1,37 @@
+# ダッシュボードから届いたディスクの掃除の依頼を実行する（#657）。
+#
+# **削除はキャッシュの持ち主（User=）の権限で行う。** 対象（/tmp 直下・~/.npm など）は持ち主が
+# 自由に作り替えられる場所で、root で再帰削除するとシンボリックリンクへの差し替えで他人の所有物まで
+# 消しうるため。User= は HOST_STATS_CLEANUP_USER と同じユーザーにする。
+#
+# **EnvironmentFile は渡さない。** /etc/ops-dashboard-host-stats.env には HOST_STATS_TOKEN が入っており、
+# 持ち主のプロセスへ見せる必要が無い。agent.sh は `--cleanup` のときだけトークン無しで動く。
+#
+# 起動は ops-dashboard-host-stats-cleanup.path から（依頼ファイルの変更）。手で
+# `systemctl start` しても、依頼ファイルのうち結果の無いものだけを実行して終わる。
+[Unit]
+Description=ops-dashboard から依頼されたディスクの掃除を実行する
+Documentation=https://github.com/guchi-apps/status-hub
+After=local-fs.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=guchi
+ExecStart=/opt/ops-dashboard-host-stats/agent.sh --cleanup
+# worktree の掃除（issue-deck の cleanup-worktrees.sh）は git fetch と gh を使う。
+# node・pnpm は mise の shims にある
+Environment=PATH=/home/guchi/.local/share/mise/shims:/home/guchi/.local/bin:/usr/local/bin:/usr/bin:/bin
+# worktree の掃除は既定40分（HOST_STATS_CLEANUP_WORKTREES_TIMEOUT）で打ち切る。全体はそれより長く取る
+TimeoutStartSec=1h
+Nice=19
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+# /tmp を消すため、実ホストの /tmp が見える必要がある
+PrivateTmp=no
+ProtectSystem=strict
+# 消してよい置き場だけ書き込みを許す（ProtectSystem=strict のままでも、ここと StateDirectory は書ける）
+ReadWritePaths=/tmp /home/guchi
+# 結果ファイル（cleanup-result.tsv）の置き場。User= の持ち物として作られ、送信側（root）が読む
+StateDirectory=ops-dashboard-host-stats-cleanup
+StateDirectoryMode=0755

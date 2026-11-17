@@ -8,6 +8,7 @@ import type {
     HostStatsView,
 } from "@/types/host-stats"
 import { evaluateSensors, getSensorStaleAfterSeconds } from "@/lib/host-stats/sensors"
+import { readPendingCleanup } from "@/lib/host-stats/cleanup-requests"
 
 /**
  * 各ホストから受け取ったメトリクスの保管。
@@ -270,7 +271,14 @@ async function readHostView(
     const [latest, history] = await Promise.all([readSnapshot(id), readHistoryFile(id, cutoffSeconds)])
     if (!latest) return null
 
-    return toHostView(id, latest, downsample(history), Date.now(), offlineAfterSeconds)
+    const now = Date.now()
+    const view = toHostView(id, latest, downsample(history), now, offlineAfterSeconds)
+    // 掃除の依頼（#657）。掃除を申告しているホストだけ読む。読めなくても画面は出す
+    if (latest.cleanup) {
+        const pending = await readPendingCleanup(id, now).catch(() => [])
+        if (pending.length > 0) view.cleanupPending = pending
+    }
+    return view
 }
 
 /**
