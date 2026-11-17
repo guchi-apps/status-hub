@@ -180,7 +180,7 @@ sudo systemctl start ops-dashboard-host-stats-disk.service   # 初回の計測�
 
 | ID | 消すもの |
 | --- | --- |
-| `tmux-stale` | デタッチのまま24時間以上動きが無いtmuxセッション（tmuxタブの「放置」と同じ判定）。既存の閉じる依頼（#409）へまとめて積む |
+| `tmux-stale` | デタッチのまま24時間以上動きが無いtmuxセッション（tmuxタブの「放置」と同じ判定）。**セッションを指さず「放置を全部閉じて」と1件だけ頼む**（応答の `closeStale`）。送信上限（20件）で一覧に載らない分も、エージェントが全件を見て閉じる |
 | `worktrees` | issue-deck の `cleanup-worktrees.sh --all-repos --yes`。未コミット・未push・セッション稼働中のworktreeは残す（判定はスクリプト側） |
 | `node-compile-cache` | `/tmp/node-compile-cache` の中身 |
 | `npm-cache` | `~/.npm/_cacache` |

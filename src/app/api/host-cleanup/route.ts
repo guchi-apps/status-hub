@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { enqueueCleanupRequest } from "@/lib/host-stats/cleanup-requests"
 import { isCleanupTargetId } from "@/lib/host-stats/cleanup-targets"
-import { enqueueCloseRequest } from "@/lib/host-stats/close-requests"
+import { enqueueCloseStaleRequest } from "@/lib/host-stats/close-requests"
 import { ID_PATTERN } from "@/lib/host-stats/report"
 import { readSnapshot } from "@/lib/host-stats/store"
 import { isStaleTmuxSession } from "@/lib/host-stats/tmux"
@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic"
  * **ファイルを消す操作のため、ログインセッションでだけ受け付ける**（`OPS_API_TOKEN` では通さない）。
  *
  * `{ hostId, target }` — target はエージェントが掃除できると申告している対象のIDだけ。
- * `tmux-stale` は、直近の受信で放置と判定されるセッションを tmux の閉じる依頼（#409）へ積む。
+ * `tmux-stale` は「放置セッションを全部閉じて」という依頼を1件積む。受信済みの一覧は先頭20件で切られるため、
+ * セッションを指さず、何が放置かはエージェントが自分で見て決める（一覧の外にある放置セッションも閉じられる）。
  */
 export async function POST(request: NextRequest) {
     const { response } = await requireSessionForApi()
@@ -50,17 +51,15 @@ export async function POST(request: NextRequest) {
     if (target === "tmux-stale") {
         const sessions = snapshot.tmuxSessions ?? []
         const now = Date.now()
-        const stale = sessions.filter((session) => session.user !== undefined && isStaleTmuxSession(session, now))
-        if (stale.length === 0) {
+        // 一覧に載らなかった分（総数との差）に放置があるかは分からないため、その分があるときは依頼を通す
+        const hidden = Math.max(0, (snapshot.tmuxSessionTotal ?? sessions.length) - sessions.length)
+        const hasStale = sessions.some((session) => isStaleTmuxSession(session, now))
+        if (!hasStale && hidden === 0) {
             return NextResponse.json({ error: "放置セッションはありません" }, { status: 404 })
         }
 
-        let queued = 0
-        for (const session of stale) {
-            const result = await enqueueCloseRequest(hostId, { user: session.user, name: session.name }, sessions, now)
-            if (result === "queued" || result === "exists") queued += 1
-        }
-        return NextResponse.json({ ok: true, queued })
+        const result = await enqueueCloseStaleRequest(hostId, now)
+        return NextResponse.json({ ok: true, alreadyRequested: result === "exists" })
     }
 
     const result = await enqueueCleanupRequest(hostId, target, snapshot.cleanup)

@@ -1218,6 +1218,70 @@ close_requested_sessions() {
     done < <(printf '%s' "$list" | grep -oE "\"${user_re}\|${name_re}\"")
 }
 
+# 放置セッションをまとめて閉じる（#657）。応答の "closeStale":<依頼時刻> を読む。
+#
+# セッション単位の依頼（上）は、送信した一覧（先頭 MAX_TMUX_SESSIONS 件）に載ったものしか指せない。
+# 一覧の外にある放置セッションも閉じられるよう、こちらはセッションを指さず、**全件をここで見て**
+# 放置のものだけを閉じる。放置の規則はダッシュボードの `isStaleTmuxSession`
+# （src/lib/host-stats/tmux.ts）と同じ: デタッチ・ペインでシェル以外が動いていない・最終活動（無ければ作成）から
+# TMUX_STALE_SECONDS 以上。時刻が読めないセッションは放置と見なさない。
+#
+# 依頼時刻は数字だけを受け取り、処理した時刻を状態ファイルへ残して同じ依頼を二度やらない
+# （依頼は数分生きるため、毎分の応答に載り続ける。二度目に閉じると、その間に放置になったものまで消える）。
+# root で動くため、閉じるのは名前の規則に合うものだけを `=` 付きの完全一致で行う。
+TMUX_STALE_SECONDS=86400
+
+close_stale_sessions() {
+    local body="$1" requested handled_file handled now dir uid user home socket
+    local name windows created attached activity busy commands directory last closed
+    local name_re='^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$'
+
+    command -v tmux > /dev/null 2>&1 || return 0
+
+    requested="$(printf '%s' "$body" | grep -oE '"closeStale":[0-9]{1,16}' | head -n 1 | cut -d: -f2 || true)"
+    [ -n "$requested" ] || return 0
+
+    handled_file="$APP_DISK_CACHE_DIR/close-stale-handled"
+    handled="$(cat "$handled_file" 2> /dev/null || true)"
+    [ "$handled" != "$requested" ] || return 0
+
+    now="$(date +%s)"
+    closed=0
+
+    for dir in "$TMUX_SOCKET_ROOT"/tmux-*; do
+        [ -d "$dir" ] || continue
+        uid="${dir##*/tmux-}"
+        case "$uid" in "" | *[!0-9]*) continue ;; esac
+        user="$(getent passwd "$uid" 2> /dev/null | cut -d: -f1)"
+        home="$(getent passwd "$uid" 2> /dev/null | cut -d: -f6)"
+        [ -n "$user" ] || user="uid:$uid"
+
+        for socket in "$dir"/*; do
+            [ -S "$socket" ] || continue
+
+            while IFS=$'\x1f' read -r name windows created attached activity busy commands directory; do
+                [[ "$name" =~ $name_re ]] || continue
+                [ "${attached:-0}" = "0" ] || continue
+                [ "${busy:-0}" != "1" ] || continue
+
+                last="${activity:-0}"
+                { [ "$last" -gt 0 ] 2> /dev/null; } || last="${created:-0}"
+                { [ "$last" -gt 0 ] 2> /dev/null; } || continue
+                [ $((now - last)) -ge "$TMUX_STALE_SECONDS" ] || continue
+
+                if tmux -S "$socket" kill-session -t "=$name" 2> /dev/null; then
+                    closed=$((closed + 1))
+                    echo "放置 tmux セッションを閉じました: ${user}/${name}" >&2
+                fi
+            done < <(tmux_sessions_tsv "$socket" "$home")
+        done
+    done
+
+    # 閉じ終えてから記録する（途中で落ちたら次の送信でやり直す）
+    printf '%s' "$requested" > "$handled_file" 2> /dev/null || true
+    echo "放置 tmux セッションを ${closed} 件閉じました" >&2
+}
+
 # ---------------------------------------------------------------------------
 # ディスクの掃除（#657）
 #
@@ -1234,7 +1298,7 @@ close_requested_sessions() {
 #
 # **画面から渡るのは対象のIDだけで、消す場所と消し方はここに固定してある。**
 # 対象を足すときは CLEANUP_IDS と src/lib/host-stats/cleanup-targets.ts を合わせる。
-# tmux-stale（放置セッション）はダッシュボードが既存の閉じる依頼（#409）へ積むため、ここでは何もしない。
+# tmux-stale（放置セッション）は上の close_stale_sessions（応答の "closeStale"）が閉じるため、ここでは何もしない。
 # ---------------------------------------------------------------------------
 
 CLEANUP_IDS="tmux-stale worktrees node-compile-cache npm-cache tmp-stale claude-scratch"
@@ -1578,6 +1642,7 @@ main() {
     fi
 
     close_requested_sessions "$body"
+    close_stale_sessions "$body"
     queue_cleanup_requests "$body"
 }
 

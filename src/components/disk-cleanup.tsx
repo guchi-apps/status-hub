@@ -70,6 +70,7 @@ function stateOf(
         run,
         confirmId,
         staleCount,
+        hiddenCount,
         now,
     }: {
         local: LocalRequest | undefined
@@ -77,6 +78,7 @@ function stateOf(
         run: HostStatsCleanupRun | undefined
         confirmId: HostCleanupTargetId | null
         staleCount: number
+        hiddenCount: number
         now: number
     }
 ): RowState {
@@ -91,6 +93,8 @@ function stateOf(
             }
             return { kind: "running" }
         }
+        // 一覧に載らない分は、閉じ終わったか画面から分からない。閉じられなかったとは断定せず、待つだけにする
+        if (local && hiddenCount > 0 && now - local.at <= TMUX_CLOSE_TIMEOUT_MS) return { kind: "running" }
     } else {
         if (run?.status === "running" && (!pending || run.requestedAt === pending.requestedAt)) return { kind: "running" }
         if (pending) return { kind: "queued" }
@@ -145,13 +149,29 @@ function DiskCleanupBody({ host }: { host: HostStatsHostView }) {
     const staleCount = (host.latest.tmuxSessions ?? []).filter(
         (session) => session.user !== undefined && isStaleTmuxSession(session, now)
     ).length
+    // 送信上限で一覧に載らなかった分。放置かどうかは分からないが、依頼はエージェントが全件を見て閉じる
+    const hiddenCount = Math.max(
+        0,
+        (host.latest.tmuxSessionTotal ?? (host.latest.tmuxSessions ?? []).length) -
+            (host.latest.tmuxSessions ?? []).length
+    )
 
     const rows: Row[] = CLEANUP_TARGETS.flatMap((info) => {
         const target = cleanup.targets.find((entry) => entry.id === info.id)
         if (!target) return []
 
         if (info.id === "tmux-stale") {
-            return [{ info, target, size: { value: `${staleCount}件`, note: "放置" }, empty: staleCount === 0 }]
+            return [
+                {
+                    info,
+                    target,
+                    size: {
+                        value: `${staleCount}件`,
+                        note: hiddenCount > 0 ? `放置 · 一覧外に${hiddenCount}件` : "放置",
+                    },
+                    empty: staleCount === 0 && hiddenCount === 0,
+                },
+            ]
         }
         const size =
             target.bytes === null
@@ -222,6 +242,7 @@ function DiskCleanupBody({ host }: { host: HostStatsHostView }) {
                         run: row.target.lastRun,
                         confirmId,
                         staleCount,
+                        hiddenCount,
                         now,
                     })
                     const last = id === "tmux-stale" ? null : lastRunText(row.target.lastRun, now)
