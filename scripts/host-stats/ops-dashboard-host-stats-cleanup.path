@@ -1,0 +1,15 @@
+# ダッシュボードから届いたディスクの掃除の依頼を見張り、掃除ユニットを起こす（#657）。
+#
+# 依頼ファイルは送信側（ops-dashboard-host-stats.service・root）が応答を検査して書く。
+# 掃除ユニットが動いている間に届いた依頼は拾えないことがあるが、ダッシュボードは実行が
+# 始まるまで毎回同じ依頼を返し、送信側が書き直すので、次の送信（約1分後）で拾われる。
+[Unit]
+Description=ops-dashboard からのディスクの掃除の依頼を見張る
+Documentation=https://github.com/guchi-apps/status-hub
+
+[Path]
+PathModified=/var/lib/ops-dashboard-host-stats/cleanup-request
+Unit=ops-dashboard-host-stats-cleanup.service
+
+[Install]
+WantedBy=paths.target

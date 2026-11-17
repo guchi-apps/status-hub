@@ -6,6 +6,7 @@ import { HostStatsReportError, parseHostStatsReport } from "@/lib/host-stats/rep
 import { getHostStatsView, saveHostStatsReport } from "@/lib/host-stats/store"
 import { processTimerAlerts } from "@/lib/host-stats/timer-alerts"
 import { settleCloseRequests } from "@/lib/host-stats/close-requests"
+import { settleCleanupRequests } from "@/lib/host-stats/cleanup-requests"
 
 export const dynamic = "force-dynamic"
 
@@ -85,10 +86,19 @@ export async function POST(request: NextRequest) {
             console.error("Close request error:", error)
         }
 
+        // ディスクの掃除の依頼（#657）。tmux と同じく応答に載せ、`<対象>:<依頼時刻>` だけを渡す
+        let cleanupRequests: string[] = []
+        try {
+            cleanupRequests = await settleCleanupRequests(report.id, report.cleanup)
+        } catch (error) {
+            console.error("Cleanup request error:", error)
+        }
+
         return NextResponse.json({
             ok: true,
             receivedAt: snapshot.receivedAt,
             ...(closeSessions.length > 0 && { closeSessions }),
+            ...(cleanupRequests.length > 0 && { cleanupRequests }),
         })
     } catch (error) {
         if (error instanceof HostStatsReportError) {

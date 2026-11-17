@@ -41,10 +41,18 @@
 #   HOST_STATS_DISK_WATCH_TIMEOUT
 #                           任意。`--measure-disk` で1か所の du に掛けてよい秒数（既定: 900）。
 #                           超えた場所は「測れなかった」（null）として送る
+#   HOST_STATS_CLEANUP_TARGETS
+#                           任意。ダッシュボードの「掃除」欄から消せるようにする対象をカンマ区切りで（#657）。
+#                           tmux-stale,worktrees,node-compile-cache,npm-cache,tmp-stale,claude-scratch。
+#                           未設定なら項目ごと送らず、依頼も受け付けない
+#   HOST_STATS_CLEANUP_USER 任意（上を設定するなら必須）。キャッシュの持ち主のユーザー名。見込み容量を測る対象を決める。
+#                           削除そのものは掃除ユニット（ops-dashboard-host-stats-cleanup.service の User=）の権限で行う
 #
 # `--print` を付けて実行すると、送信せずに組み立てたJSONを表示する（設置時の確認用）。
 # `--measure-disk` を付けて実行すると、HOST_STATS_DISK_WATCH_PATHS の各場所を du してキャッシュへ
 # 書くだけで送信はしない（ops-dashboard-host-stats-disk.timer から1時間ごとに呼ぶ）。
+# `--cleanup` を付けて実行すると、ダッシュボードから届いた掃除の依頼を実行する
+# （ops-dashboard-host-stats-cleanup.path から、持ち主のユーザーで呼ぶ。#657）。
 
 set -euo pipefail
 
@@ -80,8 +88,11 @@ MAX_APPS=30
 # 場所別のディスク使用量で送る場所の上限。ダッシュボード側の上限と合わせる
 MAX_DISK_WATCH=10
 
-: "${OPS_DASHBOARD_URL:?OPS_DASHBOARD_URL が未設定です}"
-: "${HOST_STATS_TOKEN:?HOST_STATS_TOKEN が未設定です}"
+# `--cleanup`（掃除ユニット）は送信しないうえ、トークンを読ませないよう EnvironmentFile を渡さずに動かす
+if [ "${1:-}" != "--cleanup" ]; then
+    : "${OPS_DASHBOARD_URL:?OPS_DASHBOARD_URL が未設定です}"
+    : "${HOST_STATS_TOKEN:?HOST_STATS_TOKEN が未設定です}"
+fi
 DISK_PATHS="${HOST_STATS_DISK_PATHS:-/}"
 SERVICES="${HOST_STATS_SERVICES:-}"
 TIMERS="${HOST_STATS_TIMERS:-}"
@@ -95,6 +106,12 @@ DISK_WATCH_PATHS="${HOST_STATS_DISK_WATCH_PATHS:-}"
 DISK_WATCH_TIMEOUT="${HOST_STATS_DISK_WATCH_TIMEOUT:-900}"
 # ディスク使用量のキャッシュの置き場。ユニットの StateDirectory= が STATE_DIRECTORY を渡してくる
 APP_DISK_CACHE_DIR="${STATE_DIRECTORY:-/var/lib/ops-dashboard-host-stats}"
+# ディスクの掃除（#657）。対象と持ち主は送信側だけが読む（掃除ユニットは自分の権限で動くだけ）
+CLEANUP_TARGETS="${HOST_STATS_CLEANUP_TARGETS:-}"
+CLEANUP_USER="${HOST_STATS_CLEANUP_USER:-}"
+# 依頼ファイルは送信側（root）の置き場、結果ファイルは掃除ユニット（持ち主）の置き場に置き、互いに読むだけにする
+CLEANUP_REQUEST_FILE="${HOST_STATS_CLEANUP_REQUEST_FILE:-/var/lib/ops-dashboard-host-stats/cleanup-request}"
+CLEANUP_RESULT_FILE="${HOST_STATS_CLEANUP_RESULT_FILE:-/var/lib/ops-dashboard-host-stats-cleanup/cleanup-result.tsv}"
 
 HOSTNAME_VALUE="$(hostname)"
 HOST_ID="${HOST_STATS_ID:-$(printf '%s' "$HOSTNAME_VALUE" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-' | sed 's/-*$//')}"
@@ -1096,7 +1113,7 @@ os_name() {
 }
 
 build_payload() {
-    local swap temperature tmux_output tmux_sessions tmux_total timers apps disk_watch sensors cpu_model cpu_threads
+    local swap temperature tmux_output tmux_sessions tmux_total timers apps disk_watch sensors cleanup cpu_model cpu_threads
     collect_samples
     swap="$(collect_swap)"
     temperature="$(collect_temperature)"
@@ -1117,6 +1134,9 @@ build_payload() {
     disk_watch="$(collect_disk_watch)"
 
     sensors="$(collect_sensors)"
+
+    # HOST_STATS_CLEANUP_TARGETS 未設定のホストでは空になり、項目ごと送らない（#657）
+    cleanup="$(collect_cleanup)"
 
     printf '{'
     printf '"version":%d,' "$PAYLOAD_VERSION"
@@ -1147,6 +1167,7 @@ build_payload() {
     [ -z "$tmux_sessions" ] || printf '"tmuxSessionTotal":%d,' "$tmux_total"
     [ -z "$apps" ] || printf '"apps":%s,' "$apps"
     [ -z "$disk_watch" ] || printf '"diskWatch":%s,' "$disk_watch"
+    [ -z "$cleanup" ] || printf '"cleanup":%s,' "$cleanup"
     printf '"services":%s' "$(collect_services)"
     [ -z "$timers" ] || printf ',"timers":%s' "$timers"
     [ -z "$sensors" ] || printf ',"sensors":%s' "$sensors"
@@ -1197,12 +1218,336 @@ close_requested_sessions() {
     done < <(printf '%s' "$list" | grep -oE "\"${user_re}\|${name_re}\"")
 }
 
+# ---------------------------------------------------------------------------
+# ディスクの掃除（#657）
+#
+# ダッシュボードの「掃除」欄から、決まった対象だけを消す。流れは次のとおり。
+#
+#   1. 送信（root・毎分）: 応答の "cleanupRequests":["<対象>:<依頼時刻>", ...] を検査し、
+#      依頼ファイル（CLEANUP_REQUEST_FILE）へ書くだけ。**ここでは消さない**
+#      （送信ユニットは ProtectHome=read-only で、長い削除の間に送信が止まるとホスト停止と判定されるため）
+#   2. ops-dashboard-host-stats-cleanup.path が依頼ファイルの変更で掃除ユニットを起こす
+#   3. 掃除（`--cleanup`・**User=guchi**）: 対象ごとに消し、結果を CLEANUP_RESULT_FILE へ書く。
+#      root で再帰削除すると、利用者が書き込める場所をシンボリックリンクへ差し替えられたときに
+#      他人の所有物まで消しうるため、削除は必ず持ち主の権限で行う（#657 の計画レビュー）
+#   4. 送信（root）が結果と見込み容量を "cleanup" として送り、ダッシュボードが依頼を完了にする
+#
+# **画面から渡るのは対象のIDだけで、消す場所と消し方はここに固定してある。**
+# 対象を足すときは CLEANUP_IDS と src/lib/host-stats/cleanup-targets.ts を合わせる。
+# tmux-stale（放置セッション）はダッシュボードが既存の閉じる依頼（#409）へ積むため、ここでは何もしない。
+# ---------------------------------------------------------------------------
+
+CLEANUP_IDS="tmux-stale worktrees node-compile-cache npm-cache tmp-stale claude-scratch"
+
+# 「古い」とみなす更新からの経過分（3日）
+CLEANUP_STALE_MINUTES=4320
+
+# 見込み容量の du に掛けてよい秒数（対象ごと）
+CLEANUP_MEASURE_TIMEOUT="${HOST_STATS_CLEANUP_MEASURE_TIMEOUT:-600}"
+
+# worktree の掃除（issue-deck の cleanup-worktrees.sh）に掛けてよい秒数
+CLEANUP_WORKTREES_TIMEOUT="${HOST_STATS_CLEANUP_WORKTREES_TIMEOUT:-2400}"
+
+cleanup_estimate_cache() {
+    printf '%s/cleanup-estimate.tsv' "$APP_DISK_CACHE_DIR"
+}
+
+# 設定（HOST_STATS_CLEANUP_TARGETS）に書かれ、かつ知っている対象を CLEANUP_IDS の順に1行ずつ返す
+cleanup_enabled_ids() {
+    local id
+    [ -n "$CLEANUP_TARGETS" ] && [ -n "$CLEANUP_USER" ] || return 0
+    for id in $CLEANUP_IDS; do
+        case ",${CLEANUP_TARGETS// /}," in *",$id,"*) printf '%s\n' "$id" ;; esac
+    done
+}
+
+is_known_cleanup_id() {
+    case " $CLEANUP_IDS " in *" $1 "*) return 0 ;; esac
+    return 1
+}
+
+# 持ち主が user の実ディレクトリか（シンボリックリンクは通さない）
+is_owned_dir() {
+    [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %U "$1" 2>/dev/null)" = "$2" ]
+}
+
+# root（ディレクトリ）直下の、user が持ち主で CLEANUP_STALE_MINUTES 以上更新の無いファイル・ディレクトリを
+# NUL 区切りで返す。ディレクトリは中身のどれにも最近の更新が無く、ソケットを含まないものだけ
+# （ディレクトリの mtime は中身の出入りでしか変わらず、常用のディレクトリでも古く見えるため。
+# ソケットがあるのは tmux・ssh-agent など生きているものの置き場）。
+# 残りの引数は find へそのまま渡す除外条件
+stale_entries() {
+    local root="$1" user="$2" entry
+    shift 2
+    find "$root" -xdev -mindepth 1 -maxdepth 1 -user "$user" \( -type f -o -type d \) "$@" \
+        -mmin "+$CLEANUP_STALE_MINUTES" -print0 2>/dev/null |
+        while IFS= read -r -d '' entry; do
+            if [ -d "$entry" ]; then
+                [ -z "$(find "$entry" -xdev \( -mmin "-$CLEANUP_STALE_MINUTES" -o -type s \) -print -quit 2>/dev/null)" ] ||
+                    continue
+            fi
+            printf '%s\0' "$entry"
+        done
+}
+
+# 対象ごとに消すものを NUL 区切りで返す。user・home・uid は消す側の持ち主
+# （送信側の root が見込みを測るときは HOST_STATS_CLEANUP_USER、掃除ユニットでは自分自身）。
+# worktree は issue-deck のスクリプトが判定するため、ここでは何も返さない
+cleanup_candidates() {
+    local id="$1" user="$2" home="$3" uid="$4" dir
+    case "$id" in
+        node-compile-cache)
+            dir=/tmp/node-compile-cache
+            is_owned_dir "$dir" "$user" || return 0
+            find "$dir" -xdev -mindepth 1 -maxdepth 1 -print0 2>/dev/null
+            ;;
+        npm-cache)
+            dir="$home/.npm/_cacache"
+            is_owned_dir "$dir" "$user" || return 0
+            printf '%s\0' "$dir"
+            ;;
+        tmp-stale)
+            stale_entries /tmp "$user" \
+                ! -name '.*' ! -name 'tmux-*' ! -name 'ssh-*' ! -name 'systemd-private-*' \
+                ! -name 'snap-private-tmp' ! -name 'claude-*' ! -name 'node-compile-cache'
+            ;;
+        claude-scratch)
+            dir="/tmp/claude-$uid"
+            is_owned_dir "$dir" "$user" || return 0
+            stale_entries "$dir" "$user"
+            ;;
+    esac
+}
+
+# `--measure-disk` から呼ぶ。対象ごとの見込み（バイト数・件数）をキャッシュへ書く。
+# 1行目が計測時刻（epoch秒）、2行目以降が「対象<TAB>バイト数<TAB>件数」で、測らない値は - にする
+measure_cleanup() {
+    local cache tmp id home uid list bytes count output status
+    [ -n "$(cleanup_enabled_ids)" ] || return 0
+
+    home="$(getent passwd "$CLEANUP_USER" | cut -d: -f6)"
+    uid="$(id -u "$CLEANUP_USER" 2>/dev/null)" || uid=""
+    [[ -n "$home" && -n "$uid" ]] || { echo "HOST_STATS_CLEANUP_USER（${CLEANUP_USER}）が見つかりません" >&2; return 0; }
+
+    cache="$(cleanup_estimate_cache)"
+    mkdir -p "$APP_DISK_CACHE_DIR"
+    tmp="$cache.tmp"
+    list="$tmp.list"
+
+    {
+        date +%s
+        while IFS= read -r id; do
+            case "$id" in tmux-stale | worktrees) continue ;; esac
+            cleanup_candidates "$id" "$CLEANUP_USER" "$home" "$uid" >"$list" || true
+            count="$(tr -cd '\0' <"$list" | wc -c)"
+            bytes=0
+            if [ "$count" -gt 0 ]; then
+                # 読めないファイルがあると du は非0で終わるが、読めた分の合計は出るのでそれを使う
+                # （measure_disk_watch と同じ扱い）。124 は timeout で打ち切った（過小なので使わない）
+                status=0
+                output="$(low_priority timeout "$CLEANUP_MEASURE_TIMEOUT" du -csxB1 --files0-from="$list" 2>/dev/null)" || status=$?
+                bytes="-"
+                if [ "$status" -ne 124 ]; then
+                    bytes="$(printf '%s\n' "$output" | awk '$2 == "total" { total = $1 } END { if (total != "") print total }')"
+                    [ -n "$bytes" ] || bytes="-"
+                fi
+            fi
+            # 中身ごと1つで消すもの（npm）や、中身の件数に意味の無いもの（コンパイルキャッシュ）は件数を送らない
+            case "$id" in tmp-stale | claude-scratch) ;; *) count="-" ;; esac
+            printf '%s\t%s\t%s\n' "$id" "$bytes" "$count"
+        done < <(cleanup_enabled_ids)
+    } >"$tmp"
+    rm -f "$list"
+    mv "$tmp" "$cache"
+}
+
+# 結果ファイルの1行（対象<TAB>依頼時刻<TAB>状態<TAB>開始<TAB>終了<TAB>解放バイト<TAB>件数<TAB>理由）を JSON にする
+cleanup_run_json() {
+    local requested="$1" status="$2" started="$3" finished="$4" freed="$5" count="$6" message="$7"
+    printf '{"requestedAt":%s,"status":"%s"' "$requested" "$status"
+    [ "$started" = "-" ] || printf ',"startedAt":"%s"' "$(epoch_to_iso8601 "$started")"
+    [ "$finished" = "-" ] || printf ',"finishedAt":"%s"' "$(epoch_to_iso8601 "$finished")"
+    [[ "$freed" =~ ^[0-9]+$ ]] && printf ',"freedBytes":%s' "$freed"
+    [[ "$count" =~ ^[0-9]+$ ]] && printf ',"count":%s' "$count"
+    [ "$message" = "-" ] || printf ',"message":"%s"' "$(json_escape "$message")"
+    printf '}'
+}
+
+# 送るペイロードの "cleanup"。設定していないホストでは何も返さず、項目ごと送らない
+collect_cleanup() {
+    local estimate measured="" id first=1 bytes count line requested status started finished freed run_count message
+    local -A est_bytes=() est_count=()
+    [ -n "$(cleanup_enabled_ids)" ] || return 0
+
+    estimate="$(cleanup_estimate_cache)"
+    if [ -r "$estimate" ]; then
+        measured="$(head -n 1 "$estimate" 2>/dev/null || true)"
+        while IFS=$'\t' read -r id bytes count; do
+            est_bytes["$id"]="$bytes"
+            est_count["$id"]="$count"
+        done < <(tail -n +2 "$estimate" 2>/dev/null)
+    fi
+
+    printf '{"targets":['
+    while IFS= read -r id; do
+        bytes="${est_bytes[$id]:-}"
+        count="${est_count[$id]:-}"
+        [ "$first" -eq 1 ] || printf ','
+        first=0
+        printf '{"id":"%s","bytes":%s,"count":%s' "$id" \
+            "$([[ "$bytes" =~ ^[0-9]+$ ]] && printf '%s' "$bytes" || printf 'null')" \
+            "$([[ "$count" =~ ^[0-9]+$ ]] && printf '%s' "$count" || printf 'null')"
+
+        line="$(awk -F '\t' -v id="$id" '$1 == id { print; exit }' "$CLEANUP_RESULT_FILE" 2>/dev/null || true)"
+        if [ -n "$line" ]; then
+            IFS=$'\t' read -r _ requested status started finished freed run_count message < <(printf '%s\n' "$line")
+            if [[ "$requested" =~ ^[0-9]{10,16}$ ]] && [[ "$status" =~ ^(running|ok|failed)$ ]]; then
+                printf ',"lastRun":%s' "$(cleanup_run_json "$requested" "$status" "${started:--}" "${finished:--}" "${freed:--}" "${run_count:--}" "${message:--}")"
+            fi
+        fi
+        printf '}'
+    done < <(cleanup_enabled_ids)
+    printf ']'
+    [[ "$measured" =~ ^[0-9]+$ ]] && printf ',"measuredAt":"%s"' "$(epoch_to_iso8601 "$measured")"
+    printf '}'
+}
+
+# 応答の "cleanupRequests" を検査し、依頼ファイルへ書く（送信側・root）。
+# 書くのは「設定で有効にした対象」かつ「依頼時刻が数字だけ」のものだけ。依頼が無ければ触らない
+# （書くたびに .path が掃除ユニットを起こすため）。ダッシュボードは実行が始まるまで毎回同じ依頼を返すので、
+# 掃除ユニットが別の依頼で動いていて取りこぼしても、次の送信で書き直されて拾われる
+queue_cleanup_requests() {
+    local body="$1" list entry id requested lines=""
+    [ -n "$(cleanup_enabled_ids)" ] || return 0
+
+    list="$(printf '%s' "$body" | grep -oE '"cleanupRequests":\[[^]]*\]' | head -n 1 || true)"
+    [ -n "$list" ] || return 0
+
+    while IFS= read -r entry; do
+        entry="${entry//\"/}"
+        id="${entry%%:*}"
+        requested="${entry#*:}"
+        [ "$id" != "tmux-stale" ] || continue
+        cleanup_enabled_ids | grep -qxF "$id" || continue
+        lines+="${id}"$'\t'"${requested}"$'\n'
+    done < <(printf '%s' "$list" | grep -oE '"[a-z-]{1,32}:[0-9]{10,16}"')
+
+    [ -n "$lines" ] || return 0
+    mkdir -p "$(dirname "$CLEANUP_REQUEST_FILE")"
+    # mv で置き換えると .path（PathModified）が拾わないことがあるため、同じファイルへ書き込む
+    printf '%s' "$lines" >"$CLEANUP_REQUEST_FILE"
+    chmod 644 "$CLEANUP_REQUEST_FILE" 2>/dev/null || true
+}
+
+# 結果ファイルの対象の行を差し替える（掃除ユニット・持ち主の権限）
+write_cleanup_result() {
+    local id="$1" line="$2" tmp
+    tmp="$CLEANUP_RESULT_FILE.tmp"
+    {
+        awk -F '\t' -v id="$id" '$1 != id' "$CLEANUP_RESULT_FILE" 2>/dev/null || true
+        printf '%s\n' "$line"
+    } >"$tmp"
+    mv "$tmp" "$CLEANUP_RESULT_FILE"
+}
+
+# 対象のあるファイルシステムの空き（バイト）
+free_bytes_of() {
+    df -B1 -P "$1" 2>/dev/null | awk 'NR == 2 { print $4 }'
+}
+
+# 1つの対象を消す。標準出力へ「状態<TAB>件数<TAB>理由」を返す
+run_cleanup_target() {
+    local id="$1" user="$2" home="$3" uid="$4" list count script status=0
+    case "$id" in
+        worktrees)
+            script="${HOST_STATS_CLEANUP_WORKTREES_SCRIPT:-$home/apps/issue-deck/scripts/cleanup-worktrees.sh}"
+            if [ ! -x "$script" ]; then
+                printf 'failed\t-\tissue-deck の掃除スクリプトが見つかりません\n'
+                return 0
+            fi
+            # 判定（未コミット・未push・セッション稼働中）はスクリプトに任せる。出力はジャーナルへ
+            timeout "$CLEANUP_WORKTREES_TIMEOUT" "$script" --all-repos --yes >&2 || status=$?
+            case "$status" in
+                0) printf 'ok\t-\t-\n' ;;
+                124) printf 'failed\t-\t時間内に終わりませんでした\n' ;;
+                *) printf 'failed\t-\t掃除スクリプトが失敗しました（終了コード %s）\n' "$status" ;;
+            esac
+            ;;
+        *)
+            list="$(mktemp)"
+            cleanup_candidates "$id" "$user" "$home" "$uid" >"$list" || true
+            count="$(tr -cd '\0' <"$list" | wc -c)"
+            if [ "$count" -gt 0 ]; then
+                # --one-file-system: 別のファイルシステムをまたいで消さない。rm はシンボリックリンクを辿らない
+                xargs -0 -r rm -rf --one-file-system -- <"$list" 2>/dev/null || status=$?
+            fi
+            rm -f "$list"
+            if [ "$status" -eq 0 ]; then
+                printf 'ok\t%s\t-\n' "$count"
+            else
+                printf 'failed\t%s\t一部を削除できませんでした\n' "$count"
+            fi
+            ;;
+    esac
+}
+
+# `--cleanup` の本体。掃除ユニット（User=guchi）から .path 経由で呼ばれる。
+# 依頼ファイルの各行のうち、まだ結果の無いものだけを実行する
+run_cleanup() {
+    local user uid home id requested base before after freed started outcome status count message
+
+    uid="$(id -u)"
+    if [ "$uid" -eq 0 ]; then
+        echo "root では掃除しません（掃除ユニットを User= 付きで動かしてください）" >&2
+        return 1
+    fi
+    user="$(id -un)"
+    home="${HOME:-$(getent passwd "$user" | cut -d: -f6)}"
+
+    [ -r "$CLEANUP_REQUEST_FILE" ] || return 0
+    mkdir -p "$(dirname "$CLEANUP_RESULT_FILE")"
+
+    while IFS=$'\t' read -r id requested; do
+        is_known_cleanup_id "$id" || continue
+        [ "$id" != "tmux-stale" ] || continue
+        [[ "$requested" =~ ^[0-9]{10,16}$ ]] || continue
+        # 同じ依頼をもう実行した（実行中を含む）なら飛ばす
+        awk -F '\t' -v id="$id" -v r="$requested" '$1 == id && $2 == r { found = 1 } END { exit !found }' \
+            "$CLEANUP_RESULT_FILE" 2>/dev/null && continue
+
+        case "$id" in npm-cache | worktrees) base="$home" ;; *) base=/tmp ;; esac
+        started="$(date +%s)"
+        write_cleanup_result "$id" "$(printf '%s\t%s\trunning\t%s\t-\t-\t-\t-' "$id" "$requested" "$started")"
+        echo "掃除を始めます: ${id}（依頼 ${requested}）" >&2
+
+        before="$(free_bytes_of "$base")"
+        # 標準入力は依頼ファイルなので、掃除スクリプトに読ませない
+        outcome="$(run_cleanup_target "$id" "$user" "$home" "$uid" </dev/null)"
+        after="$(free_bytes_of "$base")"
+        IFS=$'\t' read -r status count message < <(printf '%s\n' "$outcome")
+
+        freed="-"
+        if [[ "$before" =~ ^[0-9]+$ ]] && [[ "$after" =~ ^[0-9]+$ ]]; then
+            freed=$((after > before ? after - before : 0))
+        fi
+        write_cleanup_result "$id" "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+            "$id" "$requested" "$status" "$started" "$(date +%s)" "$freed" "${count:--}" "${message:--}")"
+        echo "掃除を終えました: ${id} ${status}（空きの増加 ${freed} バイト）" >&2
+    done < <(cat "$CLEANUP_REQUEST_FILE" 2>/dev/null)
+}
+
 main() {
     local payload response status body
 
     if [ "${1:-}" = "--measure-disk" ]; then
         measure_disk_watch
+        measure_cleanup
         return 0
+    fi
+
+    if [ "${1:-}" = "--cleanup" ]; then
+        run_cleanup
+        return $?
     fi
 
     payload="$(build_payload)"
@@ -1233,6 +1578,7 @@ main() {
     fi
 
     close_requested_sessions "$body"
+    queue_cleanup_requests "$body"
 }
 
 main "$@"

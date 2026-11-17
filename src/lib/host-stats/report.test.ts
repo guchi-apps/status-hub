@@ -82,3 +82,71 @@ describe("場所別のディスク使用量（diskWatch）", () => {
         assert.equal(report.diskWatch?.items[0].bytes, 0)
     })
 })
+
+describe("ディスクの掃除（cleanup）", () => {
+    it("対象・見込み・前回の結果を受け取る", () => {
+        const report = parseHostStatsReport({
+            ...BASE,
+            cleanup: {
+                targets: [
+                    { id: "tmux-stale", bytes: null, count: null },
+                    {
+                        id: "npm-cache",
+                        bytes: 4_445_704_192,
+                        count: null,
+                        lastRun: {
+                            requestedAt: 1_794_913_839_000,
+                            status: "ok",
+                            startedAt: "2026-11-17T11:11:37Z",
+                            finishedAt: "2026-11-17T11:12:00Z",
+                            freedBytes: 4_400_000_000,
+                        },
+                    },
+                    { id: "tmp-stale", bytes: 653_803_520, count: 22_342 },
+                ],
+                measuredAt: "2026-11-17T11:10:39Z",
+            },
+        })
+
+        assert.deepEqual(report.cleanup, {
+            targets: [
+                { id: "tmux-stale", bytes: null, count: null, lastRun: undefined },
+                {
+                    id: "npm-cache",
+                    bytes: 4_445_704_192,
+                    count: null,
+                    lastRun: {
+                        requestedAt: 1_794_913_839_000,
+                        status: "ok",
+                        startedAt: "2026-11-17T11:11:37Z",
+                        finishedAt: "2026-11-17T11:12:00Z",
+                        freedBytes: 4_400_000_000,
+                        count: undefined,
+                        message: undefined,
+                    },
+                },
+                { id: "tmp-stale", bytes: 653_803_520, count: 22_342, lastRun: undefined },
+            ],
+            measuredAt: "2026-11-17T11:10:39Z",
+        })
+    })
+
+    it("知らない対象・重複は捨て、知らない状態の結果は無かったことにする", () => {
+        const report = parseHostStatsReport({
+            ...BASE,
+            cleanup: {
+                targets: [
+                    { id: "rm-rf-root", bytes: 1 },
+                    { id: "npm-cache", bytes: 1, lastRun: { requestedAt: 1, status: "weird" } },
+                    { id: "npm-cache", bytes: 2 },
+                ],
+            },
+        })
+        assert.deepEqual(report.cleanup?.targets, [{ id: "npm-cache", bytes: 1, count: null, lastRun: undefined }])
+    })
+
+    it("送ってこない世代のエージェントでは undefined、形が壊れていれば弾く", () => {
+        assert.equal(parseHostStatsReport(BASE).cleanup, undefined)
+        assert.throws(() => parseHostStatsReport({ ...BASE, cleanup: { targets: "x" } }), HostStatsReportError)
+    })
+})

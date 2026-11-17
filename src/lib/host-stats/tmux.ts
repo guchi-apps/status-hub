@@ -120,6 +120,14 @@ function getState(
     return "idle"
 }
 
+/** 放置（デタッチのまま24時間以上動きが無い）か。ディスクの掃除でまとめて閉じる対象（#657） */
+export function isStaleTmuxSession(session: HostStatsTmuxSession, nowMs: number): boolean {
+    return (
+        getState(session, elapsedSeconds(session.lastActivityAt, nowMs), elapsedSeconds(session.createdAt, nowMs)) ===
+        "stale"
+    )
+}
+
 /** 全ホストの tmux セッションを1つの一覧にまとめる。並びは 稼働中 → 待機中 → 放置 */
 export function collectTmuxSessions(hosts: HostStatsHostView[], nowMs: number): TmuxSessionView[] {
     const sessions = hosts.flatMap((host) =>

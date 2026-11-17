@@ -161,7 +161,7 @@ Prometheus + Grafana は、VPSがメモリ2GBでNext.jsを10本抱えている�
 - **測るのは毎分の送信ではなく、計測専用の `ops-dashboard-host-stats-disk.timer`（1時間ごと）。** 188万ファイルを抱えた場所の `du` は数分かかり、送信の中で測るとその間メトリクスが届かずホスト停止と判定される。`agent.sh --measure-disk` が `/var/lib/ops-dashboard-host-stats/disk-watch.tsv` へ書き、送信はそれを読むだけ。`Type=oneshot` は本体の終了時に残ったプロセスを止めるため、送信側から `&` で裏に回す形にはできない
 - 1か所ごとに `HOST_STATS_DISK_WATCH_TIMEOUT`（既定900秒）で打ち切る。打ち切った・存在しない場所は画面で「—」になる（途中までの合計は過小なので使わない）
 - 内訳バーの分母は、最初に書いた場所が載っているファイルシステムの容量
-- 削除はしない。掃除は `guchi-apps/subpc` の tmpfiles 規則（キャッシュ）と issue-deck の `cleanup-worktrees.sh`（worktree）が受け持つ
+- 削除はしない。定期の掃除は `guchi-apps/subpc` の tmpfiles 規則（キャッシュ）と issue-deck の `cleanup-worktrees.sh`（worktree）が受け持ち、画面から今すぐ消すときは下の「ディスクの掃除」を使う
 
 有効にするには、`agent.sh` と新しいユニットを配り、env に `HOST_STATS_DISK_WATCH_PATHS` を足す。
 
@@ -171,6 +171,37 @@ sudo cp "$SRC"/ops-dashboard-host-stats-disk.{service,timer} /etc/systemd/system
 sudo systemctl daemon-reload
 sudo systemctl enable --now ops-dashboard-host-stats-disk.timer
 sudo systemctl start ops-dashboard-host-stats-disk.service   # 初回の計測（数分かかる）
+```
+
+### ディスクの掃除
+
+ホストのディスク詳細の「掃除」欄から、決まった対象をボタンで消せる（[issue #657](https://github.com/guchi-apps/status-hub/issues/657)）。
+エージェントの `HOST_STATS_CLEANUP_TARGETS` を設定したホストだけが欄を出す。
+
+| ID | 消すもの |
+| --- | --- |
+| `tmux-stale` | デタッチのまま24時間以上動きが無いtmuxセッション（tmuxタブの「放置」と同じ判定）。既存の閉じる依頼（#409）へまとめて積む |
+| `worktrees` | issue-deck の `cleanup-worktrees.sh --all-repos --yes`。未コミット・未push・セッション稼働中のworktreeは残す（判定はスクリプト側） |
+| `node-compile-cache` | `/tmp/node-compile-cache` の中身 |
+| `npm-cache` | `~/.npm/_cacache` |
+| `tmp-stale` | `/tmp` 直下の、持ち主のファイル・ディレクトリで3日以上更新が無いもの。`tmux-*`・`ssh-*`・ドット始まり・`systemd-private-*`・`snap-private-tmp`・`claude-*`・`node-compile-cache` は除き、中身に最近の更新かソケットがあるディレクトリも残す |
+| `claude-scratch` | `/tmp/claude-<UID>` 直下で3日以上更新が無いもの（同じ条件） |
+
+- **画面からはIDしか渡らない。** 消す場所と消し方は `agent.sh` に固定してあり、パスは送れない。依頼は tmux を閉じる依頼と同じく、毎分のPOSTの応答（`cleanupRequests`）で渡る
+- **削除は掃除ユニット（`ops-dashboard-host-stats-cleanup.service`）が持ち主の権限（`User=guchi`）で行う。** 送信ユニット（root）は応答を検査して `/var/lib/ops-dashboard-host-stats/cleanup-request` へ書くだけで、`.path` ユニットがその変更で掃除ユニットを起こす。root で再帰削除すると、持ち主が書き込める場所をシンボリックリンクへ差し替えられたときに他人の所有物まで消しうるため
+- 結果（状態・空きの増加量・件数）は掃除ユニットが `/var/lib/ops-dashboard-host-stats-cleanup/cleanup-result.tsv` に書き、送信が `cleanup.targets[].lastRun` として送る。「空きの増加」はファイルシステムの空きの差で、並行した書き込みがあるとずれる
+- 見込みの容量・件数は1時間ごとの計測（`--measure-disk`）で測る。worktree は事前に測れないため「—」
+- 受け取られないまま15分経った依頼は捨てる（エージェントや `.path` ユニットが止まっているとき）
+
+有効にするには、`agent.sh` と新しいユニットを配り、env に `HOST_STATS_CLEANUP_TARGETS` と `HOST_STATS_CLEANUP_USER` を足す（サブPCの例は `host-stats.subpc.env.example`）。
+掃除ユニットの `User=` と `ReadWritePaths=`・`PATH` は `HOST_STATS_CLEANUP_USER` のユーザーに合わせる。
+
+```bash
+sudo cp "$SRC/agent.sh" /opt/ops-dashboard-host-stats/
+sudo cp "$SRC"/ops-dashboard-host-stats-cleanup.{service,path} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ops-dashboard-host-stats-cleanup.path
+sudo systemctl start ops-dashboard-host-stats-disk.service   # 見込みの容量を測り直す（数分かかる）
 ```
 
 ### tmuxセッション一覧

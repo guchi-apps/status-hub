@@ -78,6 +78,7 @@ jobs:
         ^src/lib/(ai-usage/|claude-usage\.ts$|onepassword-usage\.ts$|uptimerobot\.ts$|uptime-kuma(-admin)?\.ts$|github-(usage|repo-visibility)\.ts$|(shared|ops-api)-token\.ts$|aide-status\.ts$|ai-app-usage/) :: 外部サービスのトークンを扱うAPIクライアントの変更 (AI利用枠・1Password・UptimeRobot・Uptime Kuma・GitHub・共有トークンAPI・AIDE・アプリ別AI利用)
         ^src/lib/push/ :: プッシュ通知の鍵（VAPID秘密鍵）を扱う送信処理の変更 (src/lib/push/**)
         ^scripts/sync-github-secrets\.sh$ :: シークレット同期スクリプトの変更 (scripts/sync-github-secrets.sh)
+        ^scripts/host-stats/ :: ホストで root・持ち主の権限で動くエージェントの変更 (scripts/host-stats/**。tmuxを閉じる・ディスクの掃除を含む)
       # 上の uses: と同じタグを指定する。片方だけ上げると新しいワークフローで
       # 古いプロンプトが使われる。
       prompts-ref: workflows/v56
