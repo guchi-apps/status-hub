@@ -60,3 +60,24 @@ export function describeCpu(model: string | undefined, threads: number | undefin
     if (name && count) return `${name} · ${count}`
     return name || count
 }
+
+/**
+ * ディスクの計測（1時間ごと）が止まったとみなす経過秒数（#663）。
+ * 計測は1時間ごとなので、2回続けて取りこぼしたら止まっていると読む。
+ */
+export const DISK_MEASUREMENT_STALE_SECONDS = 3 * 3600
+
+/** ディスクを測ってからの経過秒数。時刻が無い・読めないときは undefined */
+export function diskMeasurementAgeSeconds(measuredAt: string | undefined, now: number): number | undefined {
+    if (!measuredAt) return undefined
+
+    const measured = Date.parse(measuredAt)
+    if (Number.isNaN(measured)) return undefined
+
+    return Math.max(0, Math.floor((now - measured) / 1000))
+}
+
+/** 計測が止まっているか。経過が分からないときは止まっているとは言わない */
+export function isDiskMeasurementStale(ageSeconds: number | undefined): boolean {
+    return ageSeconds !== undefined && ageSeconds >= DISK_MEASUREMENT_STALE_SECONDS
+}
