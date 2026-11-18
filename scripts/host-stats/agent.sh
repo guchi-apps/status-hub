@@ -518,11 +518,29 @@ app_disk_tsv() {
                     printf '%s\t%s\n' "${dir##*/}" "${bytes:-0}"
                 done
             } >"$cache.tmp" && mv "$cache.tmp" "$cache"
+        else
+            echo "アプリ別のディスク使用量: ${APP_DISK_CACHE_DIR} に書けないため測りません（ユニットに StateDirectory= があるか確認してください）" >&2
         fi
     fi
 
     [ -f "$cache" ] || return 0
-    awk -F '\t' 'NR == 1 { printf "T\t%s\n", $1; next } NF >= 2 { printf "D\t%s\t%s\n", $1, $2 }' "$cache"
+
+    # 測り直せなかった古いキャッシュは送らない（#663）。キャッシュを書けないユニットのまま、
+    # 手で `--print` したときなど一度だけ書けたキャッシュを、何十日も「最新」として送り続けていた
+    measured="$(head -n 1 "$cache" 2>/dev/null || true)"
+    if ! [[ "$measured" =~ ^[0-9]+$ ]] || [ $((now - measured)) -ge $((APP_DISK_INTERVAL * 2)) ]; then
+        echo "アプリ別のディスク使用量: キャッシュが古いため送りません（計測 $(date -d "@${measured:-0}" '+%F %T' 2>/dev/null || echo 不明)）" >&2
+        return 0
+    fi
+
+    # 計測のあとで消えたアプリ（置き場から無くなったディレクトリ）は出さない
+    awk -F '\t' 'NR == 1 { printf "T\t%s\n", $1; next } NF >= 2 { printf "D\t%s\t%s\n", $1, $2 }' "$cache" |
+        while IFS=$'\t' read -r kind name bytes; do
+            if [ "$kind" = "D" ] && ! [ -d "$root/$name" ]; then
+                continue
+            fi
+            printf '%s\t%s%s\n' "$kind" "$name" "${bytes:+$'\t'$bytes}"
+        done
 }
 
 # アプリ別のメモリ・ディスク使用量（#226）。HOST_STATS_APPS_ROOT 未設定なら何も返さず、項目ごと送らない
@@ -532,7 +550,8 @@ collect_apps() {
     root="$(realpath -e "$APPS_ROOT" 2>/dev/null)" || return 0
     [ -d "$root" ] || return 0
 
-    tsv="$({ app_memory_tsv "$root"; app_disk_tsv "$root"; } 2>/dev/null || true)"
+    # ディスク側の警告（キャッシュを書けない・古い）はジャーナルへ残すため、stderr を捨てない
+    tsv="$({ app_memory_tsv "$root" 2>/dev/null; app_disk_tsv "$root"; } || true)"
 
     # メモリの多い順（同じならディスクの多い順）に並べて上限で切る。mawk には asort が無いため自前で並べる
     items="$(printf '%s\n' "$tsv" | awk -F '\t' -v max="$MAX_APPS" '
