@@ -149,6 +149,8 @@ Prometheus + Grafana は、VPSがメモリ2GBでNext.jsを10本抱えている�
 - **メモリはプロセス名ではなく作業ディレクトリで振り分ける。** 「メモリ上位」の一覧は `next-server` や `node` が並ぶだけでどのアプリか読めず、PM2 に聞く方法では user systemd で動く vps-status-api が漏れるため。`/proc/<pid>/cwd` が `HOST_STATS_APPS_ROOT/<アプリ>/…` にあるプロセスのメモリを合計する。cwd を別の場所にして起動しているプロセスは「アプリ以外」に入る
 - **足し上げるのは RSS ではなく PSS（`smaps_rollup` の `Pss`）。** RSS は共有ライブラリなどのページをプロセスの数だけ重複して数え、Node のプロセスでは実測で RSS 211MB に対し PSS 108MB と約2倍に膨らむ。RSS の合計ではホスト全体の使用量（MemTotal − MemAvailable）を超え、「使用量 − アプリ合計」で出す「アプリ以外」が負になる。`smaps_rollup` は root でないと他ユーザーのプロセス分を読めないため、読めないときだけ RSS で代用する（内訳バーは使用量で頭打ちにしている）
 - **ディスクは1時間ごとにしか測らない。** `du` は node_modules まで辿るため毎分は重く、値もそう変わらない。測った結果はユニットの `StateDirectory=` が用意する `/var/lib/ops-dashboard-host-stats/app-disk.tsv` にキャッシュし、間隔は `HOST_STATS_APP_DISK_INTERVAL`（既定3600秒）で変えられる。**キャッシュを書けない古いユニットのままだと、ディスクは測らずメモリだけを送る**（毎分 `du` を走らせないため）
+- **測り直せなかった古いキャッシュ（間隔の2倍より前）は送らない**（[issue #663](https://github.com/guchi-apps/status-hub/issues/663)）。`StateDirectory=` の無いユニットのVPSで、`sudo … --print`（サンドボックスの外で走る）が一度だけ書いたキャッシュを65日間「最新」として送り続け、消したアプリが一覧に残っていた。書けないとき・古いときはジャーナル（`journalctl -u ops-dashboard-host-stats.service`）に理由が出る。計測のあとで置き場から消えたアプリも送らない
+- 画面は計測が3時間以上前なら「停止中」として注意書きを出す（対応前のエージェントが古い値を送ってきても気づけるように）。場所別の内訳も同じ
 - 横棒の長さは最大のアプリを基準にしている。1アプリはホスト全体の数%にしかならず、全体を分母にすると差が読めないため。全体に対する割合は右端の％で出す
 
 既に設置済みのホストで有効にするには、`agent.sh` とユニットファイルを配り直し、`/etc/ops-dashboard-host-stats.env` に `HOST_STATS_APPS_ROOT` を追記する（手順は下記「tmuxセッション一覧」末尾の配り直しと同じ）。

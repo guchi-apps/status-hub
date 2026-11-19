@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { formatAge, formatBytes } from "@/lib/host-stats/format"
+import { diskMeasurementAgeSeconds, formatAge, formatBytes, isDiskMeasurementStale } from "@/lib/host-stats/format"
 import { cn } from "@/lib/utils"
 import type { HostStatsApps, HostStatsDiskWatch, HostStatsUsage } from "@/types/host-stats"
 
@@ -28,12 +28,23 @@ function percentOf(bytes: number, total: number): number {
 
 /** ディスクを測ってからの経過秒数。時刻が読めなければ undefined */
 function measuredAgeSeconds(measuredAt?: string): number | undefined {
-    if (!measuredAt) return undefined
+    return diskMeasurementAgeSeconds(measuredAt, Date.now())
+}
 
-    const measured = Date.parse(measuredAt)
-    if (Number.isNaN(measured)) return undefined
+/** 計測時刻の表示。計測が止まっているときは色を変えて「止まっている」と分かるようにする（#663） */
+function measuredStamp(age: number | undefined): { stamp?: string; stale: boolean } {
+    if (age === undefined) return { stale: false }
+    const stale = isDiskMeasurementStale(age)
+    return { stamp: `計測 ${formatAge(age)}（1時間ごと${stale ? "・停止中" : ""}）`, stale }
+}
 
-    return Math.max(0, Math.floor((Date.now() - measured) / 1000))
+/** 計測が止まっているときに内訳の上へ出す注意書き */
+function StaleNotice({ age }: { age: number }) {
+    return (
+        <p role="status" className="text-[11px] text-amber-400 sm:text-xs">
+            計測が{formatAge(age)}から止まっています。表示はその時点の値で、いまは無いものが残っていたり、増減が反映されていなかったりします。
+        </p>
+    )
 }
 
 /**
@@ -50,6 +61,7 @@ function ResourceBlock({
     rows,
     usage,
     stamp,
+    stampStale = false,
     barClassName,
     partLabel = "アプリ",
 }: {
@@ -59,6 +71,8 @@ function ResourceBlock({
     rows: ResourceRow[]
     usage: HostStatsUsage
     stamp?: string
+    /** 計測が止まっている（stamp を注意の色で出す） */
+    stampStale?: boolean
     barClassName: string
     /** 行の合計の呼び名。内訳バーの凡例は「{partLabel}」「{partLabel}以外」になる */
     partLabel?: string
@@ -84,7 +98,11 @@ function ResourceBlock({
                 <span className="text-xs text-muted-foreground">
                     {partLabel}合計 / {formatBytes(usage.totalBytes)}
                 </span>
-                {stamp && <span className="ml-auto text-[10px] text-muted-foreground">{stamp}</span>}
+                {stamp && (
+                    <span className={cn("ml-auto text-[10px]", stampStale ? "font-semibold text-amber-400" : "text-muted-foreground")}>
+                        {stamp}
+                    </span>
+                )}
             </div>
 
             <div
@@ -248,21 +266,24 @@ export function AppDiskBreakdown({ apps }: { apps?: HostStatsApps }) {
         return (
             <EmptyBreakdown
                 label="Disk · アプリ別"
-                message="ディスク使用量はまだ測っていません（1時間ごとに計測します）。"
+                message="ディスク使用量の計測値がありません（1時間ごとに計測します。続く場合はエージェントが計測結果を書き込めていない可能性があります）。"
             />
         )
     }
 
     const measuredAge = measuredAgeSeconds(apps.diskMeasuredAt)
+    const { stamp, stale } = measuredStamp(measuredAge)
 
     return (
         <div className="space-y-3">
+            {stale && measuredAge !== undefined && <StaleNotice age={measuredAge} />}
             <ResourceBlock
                 label="Disk · アプリ別"
                 totalLabel="ディスク容量"
                 rows={rows}
                 usage={apps.disk}
-                stamp={measuredAge === undefined ? undefined : `計測 ${formatAge(measuredAge)}（1時間ごと）`}
+                stamp={stamp}
+                stampStale={stale}
                 barClassName="bg-teal-400"
             />
             <p className={FOOTNOTE_CLASS}>
@@ -288,16 +309,19 @@ export function DiskWatchBreakdown({ diskWatch }: { diskWatch?: HostStatsDiskWat
         .sort((a, b) => b.bytes - a.bytes)
     const unmeasured = diskWatch.items.filter((item) => item.bytes === null).map((item) => item.path)
     const measuredAge = measuredAgeSeconds(diskWatch.measuredAt)
+    const { stamp, stale } = measuredStamp(measuredAge)
 
     return (
         <div className="space-y-3">
+            {stale && measuredAge !== undefined && <StaleNotice age={measuredAge} />}
             {diskWatch.disk && rows.length > 0 ? (
                 <ResourceBlock
                     label={label}
                     totalLabel="ディスク容量"
                     rows={rows}
                     usage={diskWatch.disk}
-                    stamp={measuredAge === undefined ? undefined : `計測 ${formatAge(measuredAge)}（1時間ごと）`}
+                    stamp={stamp}
+                    stampStale={stale}
                     barClassName="bg-amber-400"
                     partLabel="指定した場所"
                 />
