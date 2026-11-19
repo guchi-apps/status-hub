@@ -14,6 +14,13 @@ export interface ChangelogEntry {
 // 新しいバージョンを配列の先頭に追記していく（changelog-ja skill の運用ルールに従う）
 export const changelog: ChangelogEntry[] = [
     {
+        version: "0.60.1",
+        date: "2026-11-19",
+        changes: [
+            "アプリ別のディスク使用量で、計測が古くなっている値を最新のように表示しないようにしました。",
+        ],
+    },
+    {
         version: "0.60.0",
         date: "2026-11-17",
         changes: [
