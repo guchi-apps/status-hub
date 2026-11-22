@@ -14,10 +14,10 @@ export const dynamic = "force-dynamic"
 const MAX_BODY_BYTES = 32_768
 
 /**
- * サブPCのメトリクスの受け口と取り出し口。
+ * DeskMiniのメトリクスの受け口と取り出し口。
  *
- * VPS Status（自ホストの /proc を直読み）と違い、サブPCは自宅LAN内にいてVPSから
- * ポーリングできないため、サブPC側のエージェントから定期POSTしてもらう push 型にしている。
+ * VPS Status（自ホストの /proc を直読み）と違い、DeskMiniは自宅LAN内にいてVPSから
+ * ポーリングできないため、DeskMini側のエージェントから定期POSTしてもらう push 型にしている。
  *
  * - POST: エージェントからの受信。ログイン画面を通れないため `HOST_STATS_TOKEN` で認証する
  *   （このパスは src/proxy.ts の認証対象から除外している）

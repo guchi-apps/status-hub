@@ -7,7 +7,7 @@
 # （HostStatsReport）は共通だが、macOSに対応する取得手段が無い項目（CPU温度・systemdサービス
 # 相当・定期ジョブ・アプリ別リソース・tmuxセッション集計）は送らない。いずれもダッシュボード側では
 # 任意項目として扱われ、送らなければその項目・カードが出ないだけで受信自体は失敗しない
-# （README「ホスト（VPS・サブPC）のステータス表示」の「macOS（Mac mini）への設置」を参照）。
+# （README「ホスト（VPS・DeskMini）のステータス表示」の「macOS（Mac mini）への設置」を参照）。
 #
 # 設定は環境変数で渡す（launchd から `set -a; . <envファイル>; set +a` で読み込んでから
 # 実行する。README を参照）:

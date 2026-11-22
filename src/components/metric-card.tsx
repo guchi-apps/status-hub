@@ -29,7 +29,7 @@ interface MetricCardProps {
     valueClassName?: string
     /** 値の下に敷く推移グラフなど */
     chart?: React.ReactNode
-    /** 値を薄く表示する（サブPCがオフラインで、表示値が過去のものになっている場合） */
+    /** 値を薄く表示する（DeskMiniがオフラインで、表示値が過去のものになっている場合） */
     dimmed?: boolean
     /** 渡すと押せるカードになり、詳細を開く入口として描く（#558）。押した要素が渡る（フォーカス復帰用） */
     onOpen?: (trigger: HTMLElement) => void
