@@ -321,7 +321,7 @@ function JobsPanel({ jobs }: { jobs: AideJob[] }) {
             trailing={
                 <>
                     <SeverityBadge severity={worst(jobs.map((job) => job.severity))} />
-                    <Meta>worker · サブPC</Meta>
+                    <Meta>worker · DeskMini／Mac mini</Meta>
                 </>
             }
         >
@@ -675,7 +675,7 @@ function ConnectorsPanel({ connectors, now }: { connectors: AideConnector[]; now
     }
 
     const settingBadge = (connector: AideConnector) =>
-        // worker 側（サブPC）の設定はAIDEのサーバーから判定できない。未設定と出すと常に未設定に見える
+        // worker 側（DeskMini／Mac mini）の設定はAIDEのサーバーから判定できない。未設定と出すと常に未設定に見える
         connector.configured === null ? (
             <StatusBadge tone="neutral">worker側</StatusBadge>
         ) : connector.configured ? (
@@ -720,7 +720,7 @@ function ConnectorsPanel({ connectors, now }: { connectors: AideConnector[]; now
                 )}
             </div>
             <Note>
-                押したときだけAIDEが外部へ問い合わせます。worker（サブPC）側の設定はAIDEからは判定できないため、動いているかは定期ジョブの記録で確認してください。
+                押したときだけAIDEが外部へ問い合わせます。worker（DeskMini／Mac mini）側の設定はAIDEからは判定できないため、動いているかは定期ジョブの記録で確認してください。
             </Note>
         </Panel>
     )

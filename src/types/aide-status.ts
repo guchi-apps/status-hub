@@ -65,7 +65,7 @@ export interface AideConnector {
     key: string
     label: string
     side: "server" | "worker"
-    /** worker 側（サブPC）の設定はAIDEのサーバーから判定できないため null */
+    /** worker 側（DeskMini／Mac mini）の設定はAIDEのサーバーから判定できないため null */
     configured: boolean | null
     probeable: boolean
     note: string

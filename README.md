@@ -70,15 +70,15 @@ WSL2はNAT構成のため、Windowsホスト側でWSLへのポートフォワー
 1. Supabaseダッシュボードの Authentication → URL Configuration → Redirect URLs に `http://<WindowsのLAN IP>.sslip.io:3000/auth/callback` を追加登録する（**完全一致のURLのみ登録すること**。`http://<WindowsのLAN IP>.sslip.io:*/**` のようなポート部分をワイルドカードにしたパターンを混ぜると、Redirect URLs許可リスト全体の反映が壊れ、完全一致の行も含めて効かなくなる現象を確認済み）
 2. スマホからは `http://<WindowsのLAN IP>:3000` ではなく `http://<WindowsのLAN IP>.sslip.io:3000` でアクセスする
 
-## ホスト（VPS・サブPC）のステータス表示
+## ホスト（VPS・DeskMini）のステータス表示
 
-VPSと自宅LAN内のホスト（サブPC・Mac mini等）について、CPU・メモリ・ディスク等の現在値と直近24時間の推移をホストごとに表示する（[issue #34](https://github.com/guchi-apps/status-hub/issues/34)）。
+VPSと自宅LAN内のホスト（DeskMini・Mac mini等）について、CPU・メモリ・ディスク等の現在値と直近24時間の推移をホストごとに表示する（[issue #34](https://github.com/guchi-apps/status-hub/issues/34)）。
 
 収集は**すべて push 型に一本化**している。自宅LAN内のホストはNAT配下にいてVPSからポーリングできないため、ホスト側から定期的にPOSTしてもらう必要があり、VPSだけ別方式にすると同じ表示を二重に実装することになるためである。
 VPS上ではダッシュボード自身が同じマシンで動いているので、送信先は `http://localhost:3110`（外部を経由しない）。
 
 ```
-各ホスト（VPS・サブPC・Mac mini等）             ダッシュボード（admin.gucchii.com）
+各ホスト（VPS・DeskMini・Mac mini等）             ダッシュボード（admin.gucchii.com）
   systemd timer（Linux）/ launchd（macOS）
     └─ scripts/host-stats/agent.sh（Linux）
        scripts/host-stats/agent-macos.sh（macOS）
@@ -126,10 +126,10 @@ Prometheus + Grafana は、VPSがメモリ2GBでNext.jsを10本抱えている�
 更新件数は `/usr/lib/update-notifier/apt-check` でも取れるが、1回あたり1.5秒ほどCPUを使う一方で値は1日に数回しか変わらないため、update-notifier が書き出したファイルを読むだけにしている。
 
 **CPU温度は `/sys/class/thermal` だけでは取れないマシンがある**（[issue #101](https://github.com/guchi-apps/status-hub/issues/101)）。
-サブPC（AMD Athlon 200GE）では `k10temp` が hwmon にしか登録せず、`/sys/class/thermal` に `thermal_zone*` が1つも無い。
+DeskMini（AMD Athlon 200GE）では `k10temp` が hwmon にしか登録せず、`/sys/class/thermal` に `thermal_zone*` が1つも無い。
 そのため thermal_zone で見つからなければ `/sys/class/hwmon/hwmon*` を見に行く。選び方は次のとおり。
 
-- **`hwmon<番号>` の番号は検出順で、センサーの種類を表さない。** サブPCでは `hwmon1` が内蔵GPU（`amdgpu`）のため、
+- **`hwmon<番号>` の番号は検出順で、センサーの種類を表さない。** DeskMiniでは `hwmon1` が内蔵GPU（`amdgpu`）のため、
   必ず `name` を読んでから選ぶ。CPU温度のドライバ（`k10temp`・`zenpower`・`coretemp` → `cpu_thermal` 系 → `acpitz`）の
   優先順で1つだけ拾い、該当が無ければ温度を送らない（GPUやNVMeの温度で代用しない）
 - 選んだディレクトリの中では `temp*_label` が `Tctl` / `Tdie` / `Package id 0` の入力を優先する。
@@ -158,7 +158,7 @@ Prometheus + Grafana は、VPSがメモリ2GBでNext.jsを10本抱えている�
 ### 場所別のディスク使用量
 
 ホストのディスク詳細に、`HOST_STATS_DISK_WATCH_PATHS`（カンマ区切りの絶対パス・最大10か所）で指定した場所ごとの使用量を出す（[issue #652](https://github.com/guchi-apps/status-hub/issues/652)）。
-アプリ別（`HOST_STATS_APPS_ROOT`）はアプリの置き場の中しか測れず、サブPCのルートFSが90%に達したときの主因（`/tmp/node-compile-cache` 14G・`~/.npm` 11G）が画面に出なかったため。
+アプリ別（`HOST_STATS_APPS_ROOT`）はアプリの置き場の中しか測れず、DeskMiniのルートFSが90%に達したときの主因（`/tmp/node-compile-cache` 14G・`~/.npm` 11G）が画面に出なかったため。
 
 - **測るのは毎分の送信ではなく、計測専用の `ops-dashboard-host-stats-disk.timer`（1時間ごと）。** 188万ファイルを抱えた場所の `du` は数分かかり、送信の中で測るとその間メトリクスが届かずホスト停止と判定される。`agent.sh --measure-disk` が `/var/lib/ops-dashboard-host-stats/disk-watch.tsv` へ書き、送信はそれを読むだけ。`Type=oneshot` は本体の終了時に残ったプロセスを止めるため、送信側から `&` で裏に回す形にはできない
 - 1か所ごとに `HOST_STATS_DISK_WATCH_TIMEOUT`（既定900秒）で打ち切る。打ち切った・存在しない場所は画面で「—」になる（途中までの合計は過小なので使わない）
@@ -195,7 +195,7 @@ sudo systemctl start ops-dashboard-host-stats-disk.service   # 初回の計測�
 - 見込みの容量・件数は1時間ごとの計測（`--measure-disk`）で測る。worktree は事前に測れないため「—」
 - 受け取られないまま15分経った依頼は捨てる（エージェントや `.path` ユニットが止まっているとき）
 
-有効にするには、`agent.sh` と新しいユニットを配り、env に `HOST_STATS_CLEANUP_TARGETS` と `HOST_STATS_CLEANUP_USER` を足す（サブPCの例は `host-stats.subpc.env.example`）。
+有効にするには、`agent.sh` と新しいユニットを配り、env に `HOST_STATS_CLEANUP_TARGETS` と `HOST_STATS_CLEANUP_USER` を足す（DeskMiniの例は `host-stats.subpc.env.example`）。
 掃除ユニットの `User=` と `ReadWritePaths=`・`PATH` は `HOST_STATS_CLEANUP_USER` のユーザーに合わせる。
 
 ```bash
@@ -208,12 +208,12 @@ sudo systemctl start ops-dashboard-host-stats-disk.service   # 見込みの容�
 
 ### tmuxセッション一覧
 
-サブPCはClaude Codeの作業セッションを常駐させるホストで、リポジトリをまたいだセッションが同じ `tmux ls` に並ぶ（セッション名は issue-deck 側で `<リポジトリ名>-issue-<番号>` に統一している）。
+DeskMiniはClaude Codeの作業セッションを常駐させるホストで、リポジトリをまたいだセッションが同じ `tmux ls` に並ぶ（セッション名は issue-deck 側で `<リポジトリ名>-issue-<番号>` に統一している）。
 いま何が動いているかが見えないと二重起動や放置セッションに気づけないため、ホストのメトリクスと一緒に送っている（[issue #38](https://github.com/guchi-apps/status-hub/issues/38)）。
 
 送信は20件で打ち切るが、**総数は切り捨てる前の実数を別に送る**（[issue #54](https://github.com/guchi-apps/status-hub/issues/54)）。
 一覧の長さで総数を数えると、上限に張り付いた時点で「セッションが積み上がっている」という兆候そのものが画面から消えるため。
-2026-08-14にサブPCが34セッションまで積み上がってメモリ枯渇で停止した際、画面には20件しか出ておらず、直前まで異常を読み取れなかった。
+2026-08-14にDeskMiniが34セッションまで積み上がってメモリ枯渇で停止した際、画面には20件しか出ておらず、直前まで異常を読み取れなかった。
 
 状態は各ペインの実行コマンドから判定する（[issue #40](https://github.com/guchi-apps/status-hub/issues/40)）。
 デタッチしたまま裏でclaudeが走っているのが普通の使い方で、アタッチの有無では「いま作業が動いているか」を判断できないため。
@@ -286,7 +286,7 @@ sudo systemctl start ops-dashboard-host-stats.service
 
 tmuxタブの各行の「閉じる」から、そのセッションを終了できる。確認を挟んだうえで `tmux kill-session` を実行する。
 
-ダッシュボードはホストから受け取るだけで、ホストへ指示を送る経路が無い（サブPCはNAT配下）。そのため依頼をキューに積み、
+ダッシュボードはホストから受け取るだけで、ホストへ指示を送る経路が無い（DeskMiniはNAT配下）。そのため依頼をキューに積み、
 エージェントが毎分のPOSTの応答（`closeSessions`）で受け取って実行する。**押してから消えるまで最大1分ほどかかる。**
 
 - `POST /api/tmux-close`（`{ hostId, user, name }`）はログインセッションでだけ受け付ける。`OPS_API_TOKEN` では通さない
@@ -307,14 +307,14 @@ tmuxタブの各行の「閉じる」から、そのセッションを終了で�
 
 ### 各ホストへのエージェント設置
 
-`scripts/host-stats/` の3ファイルを配置する。エージェントはbashとcurlだけで動き、常駐しない（1分ごとに起動して終了する短命プロセス）。VPS・サブPCとも手順は同じで、設定ファイルの中身だけが違う。
+`scripts/host-stats/` の3ファイルを配置する。エージェントはbashとcurlだけで動き、常駐しない（1分ごとに起動して終了する短命プロセス）。VPS・DeskMiniとも手順は同じで、設定ファイルの中身だけが違う。
 
 **VPSでは管理者アカウントで作業すること。** デプロイ先（`~/apps/admin`）の所有者である `github-user` は
 sudo が `apply.sh` のみに制限されており、`/opt` や `/etc` への配置ができない。
 ファイルの読み取りは root で行われるため、配置元にデプロイ先のパスをそのまま指定してよい。
 
 ```bash
-# VPSの場合。デプロイ先から配る（サブPCではリポジトリをcloneした場所を指す）
+# VPSの場合。デプロイ先から配る（DeskMiniではリポジトリをcloneした場所を指す）
 SRC=/home/github-user/apps/admin/scripts/host-stats
 
 # 1. エージェントを配置する
@@ -323,7 +323,7 @@ sudo cp "$SRC/agent.sh" /opt/ops-dashboard-host-stats/
 sudo chmod 755 /opt/ops-dashboard-host-stats/agent.sh
 
 # 2. 設定ファイルを新規に作る（トークンを含むため 600 / root 所有にする）
-#    VPS なら host-stats.vps.env.example、サブPC なら host-stats.subpc.env.example を使う
+#    VPS なら host-stats.vps.env.example、DeskMini なら host-stats.subpc.env.example を使う
 sudo cp "$SRC/host-stats.vps.env.example" /etc/ops-dashboard-host-stats.env
 sudo chmod 600 /etc/ops-dashboard-host-stats.env
 # エディタを開く行なので、ここまでをまとめて貼り付けないこと
@@ -345,7 +345,7 @@ systemctl status ops-dashboard-host-stats.service
 ```
 
 Pi Zero W（自宅LANのSwitchBot取得機）は `host-stats.pi0w.env.example` を使い、センサーごとの取得状況も送る。
-Piはこのリポジトリを持たないため、サブPCからSSHで配る。手順と判定は [docs/pi0w-host-stats.md](docs/pi0w-host-stats.md)。
+Piはこのリポジトリを持たないため、DeskMiniからSSHで配る。手順と判定は [docs/pi0w-host-stats.md](docs/pi0w-host-stats.md)。
 
 `/etc/ops-dashboard-host-stats.env` は各ホストで新規に作るファイルで、Gitでもデプロイでも管理していない。
 アプリ本体の `.env`（デプロイのたびに書き換わり、全シークレットを含む）とは意図的に分けている。
@@ -371,7 +371,7 @@ macOSには `/proc`・`systemctl`・`/sys/class/*` が無く、`agent.sh` はそ
 任意項目で、送らなければそのホストにはその項目・カードが出ないだけで受信自体は失敗しない（「表示する項目」参照）。
 必要になれば別途対応する。
 
-設置はVPS・サブPCと同じ3ファイル構成だが、systemd の代わりに launchd を使う。
+設置はVPS・DeskMiniと同じ3ファイル構成だが、systemd の代わりに launchd を使う。
 
 ```bash
 SRC=<agent-macos.sh・host-stats.macmini.env.example・plistを置いた場所>
@@ -398,7 +398,7 @@ sudo launchctl load -w /Library/LaunchDaemons/com.gucchii.ops-dashboard-host-sta
 tail -f /var/log/ops-dashboard-host-stats.log
 ```
 
-`HOST_STATS_TOKEN` はVPS・サブPCと共通の値（1Passwordの `apps/ops-dashboard/host-stats-token`）を使う。
+`HOST_STATS_TOKEN` はVPS・DeskMiniと共通の値（1Passwordの `apps/ops-dashboard/host-stats-token`）を使う。
 ホストが増えてもトークンは共通で、`HOST_STATS_ID` によって保存先だけが分かれる。
 
 設定を配り直すときは、`launchctl unload` してから1〜4をやり直す
@@ -735,7 +735,7 @@ Authorization: Bearer <WIDGET_TOKEN>
 **外部公開は増えていない。** Apacheが公開しているのは従来どおりで、この口はVPS内のlocalhost経由でのみ使う。
 
 ```
-GET /api/host-stats          ホスト（VPS・サブPC）のステータス
+GET /api/host-stats          ホスト（VPS・DeskMini）のステータス
 GET /api/monitors            UptimeRobot
 GET /api/uptime-kuma         Uptime Kuma
 GET /api/ai-usage            AI利用枠（Claude / ChatGPT）

@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # status-hub（旧 ops-dashboard）— エージェント向けガイド
 
-自宅VPS・サブPC・AI利用枠などの状態を1画面で見るための個人向けダッシュボード。技術スタックと
+自宅VPS・DeskMini・AI利用枠などの状態を1画面で見るための個人向けダッシュボード。技術スタックと
 セットアップ手順は [README.md](./README.md) を参照する。ここにはエージェント（Claude Code）が守る
 運用ルールと、READMEに書かれていない判断基準だけを書く。
 
@@ -303,7 +303,7 @@ AIDEタブは `aide.gucchii.com/status` と同じ内容を、AIDEの `GET /api/s
 **Claude.aiの画面に出る前払い残高・購入履歴は、サーバーから取得できない。** Claude Webの非公開API
 （`GET https://claude.ai/api/organizations/{org}/prepaid/credits` など）は `sessionKey` cookieを要求するが、
 その手前のCloudflareのボット判定で、cookieの有無・User-Agent・curl/Nodeの別によらず
-**403（`cf-mitigated: challenge`）**が返る（#252でサブPCから確認）。sessionKeyを本番へ渡す経路を
+**403（`cf-mitigated: challenge`）**が返る（#252でDeskMiniから確認）。sessionKeyを本番へ渡す経路を
 作っても効果は無いので、再挑戦しないこと。#250で入れたsessionKey経路は#252で削除した。
 
 代わりに `src/lib/ai-usage/claude-credit-ledger.ts` の**手入力の台帳**（`.data/claude-credit-ledger.json`）で出している。

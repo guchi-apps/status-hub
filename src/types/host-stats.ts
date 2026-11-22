@@ -219,7 +219,7 @@ export interface HostStatsSessions {
 /**
  * tmux のセッション1つ分。
  *
- * サブPCは Claude Code のセッションを常駐させるホストで、リポジトリをまたいだ作業セッションが
+ * DeskMiniは Claude Code のセッションを常駐させるホストで、リポジトリをまたいだ作業セッションが
  * 同じ `tmux ls` に並ぶ。いま何が動いているかが分からないと二重起動や放置に気づけないため、
  * ホストのメトリクスと一緒に送ってもらう。
  */
@@ -272,7 +272,7 @@ export interface HostStatsTmuxSession {
 /**
  * 各ホスト上のエージェント（scripts/host-stats/agent.sh）が送ってくる1回分のメトリクス。
  *
- * VPS・サブPCとも同じ経路（push型）に一本化しており、ダッシュボード自身が動いている
+ * VPS・DeskMiniとも同じ経路（push型）に一本化しており、ダッシュボード自身が動いている
  * ホストであっても /proc を直接読むのではなく、このレポートを受け取って表示する。
  */
 export interface HostStatsReport {

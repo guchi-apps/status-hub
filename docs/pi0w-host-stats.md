@@ -54,24 +54,24 @@ Issue の初期案は「1分ごと送信・3分超で応答なし」。ホスト
 
 ## 設置（人手）
 
-Pi はこのリポジトリを持たないので、サブPCのチェックアウトから SSH で配る（サブPC→Pi の SSH は subpc#126 で
+Pi はこのリポジトリを持たないので、DeskMiniのチェックアウトから SSH で配る（DeskMini→Pi の SSH は subpc#126 で
 確認済み。管理ユーザー `guchi` は `sudo -n` が通る）。**先に pi0w_260719 側の状態ファイル書き出しを入れる**
 （入っていないと「取得状況を読めません」が出続ける。壊れはしない）。
 
 ```bash
-# サブPCで。status-hub のチェックアウトから Pi へ送る
+# DeskMiniで。status-hub のチェックアウトから Pi へ送る
 cd ~/apps/status-hub && git pull && scp scripts/host-stats/{agent.sh,ops-dashboard-host-stats.service,ops-dashboard-host-stats.timer,host-stats.pi0w.env.example} guchi@pi0w:/tmp/
 ```
 
 ```bash
-# Pi で（サブPCから ssh guchi@pi0w で入る）
+# Pi で（DeskMiniから ssh guchi@pi0w で入る）
 cd /tmp && sudo install -d /opt/ops-dashboard-host-stats && sudo install -m 755 agent.sh /opt/ops-dashboard-host-stats/ && sudo install -m 600 -o root -g root host-stats.pi0w.env.example /etc/ops-dashboard-host-stats.env
 sudo vi /etc/ops-dashboard-host-stats.env   # HOST_STATS_TOKEN を記入する
 cd / && sudo bash -c 'set -a; . /etc/ops-dashboard-host-stats.env; set +a; time /opt/ops-dashboard-host-stats/agent.sh --print' >/dev/null
 cd /tmp && sudo cp ops-dashboard-host-stats.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now ops-dashboard-host-stats.timer
 ```
 
-ユニットは VPS・サブPCと同じもの。`ProtectSystem=strict`・`ProtectHome=read-only`・`StateDirectory=` は
+ユニットは VPS・DeskMiniと同じもの。`ProtectSystem=strict`・`ProtectHome=read-only`・`StateDirectory=` は
 Raspbian 10（systemd 241）でも使える。状態ファイル（`/var/lib/myroom-pi/`）は読むだけなので `strict` のままでよい。
 
 ## 実測（2026-10-11、Raspbian 10・Python 3.7.3・bash 5.0）

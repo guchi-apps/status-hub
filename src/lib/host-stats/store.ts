@@ -15,7 +15,7 @@ import { readPendingCleanup } from "@/lib/host-stats/cleanup-requests"
  *
  * 保存先は deploy.yml の削除対象に含まれない `.data/` 配下を既定とし、デプロイをまたいで
  * 履歴が消えないようにする（AI使用状況のトークン保管と同じ考え方）。
- * ホストごとにディレクトリを分けるため、VPS・サブPCが増えてもコードは変わらない。
+ * ホストごとにディレクトリを分けるため、VPS・DeskMiniが増えてもコードは変わらない。
  */
 
 const DEFAULT_OFFLINE_AFTER_SECONDS = 300
@@ -60,7 +60,7 @@ export function getHistoryHours(): number {
     return readPositiveInt("HOST_STATS_HISTORY_HOURS", DEFAULT_HISTORY_HOURS)
 }
 
-/** 画面に並べる既定の順番（VPS・サブPC・Mac Mini・ラズパイ Zero W。#588） */
+/** 画面に並べる既定の順番（VPS・DeskMini・Mac Mini・ラズパイ Zero W。#588） */
 const DEFAULT_DISPLAY_ORDER = "vps,subpc,macmini,pi0w"
 
 /** 画面に並べる順番。指定が無いホストは後ろへ回し、その中では識別子順にする */
