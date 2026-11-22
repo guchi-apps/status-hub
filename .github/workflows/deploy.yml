@@ -306,7 +306,7 @@ jobs:
             # 共通アクセス設定のDBが本番であることを示す（秘密ではないためリテラルで渡す。#489）。
             # 未設定だと development 扱いになり、本番DBと食い違って全拒否になる
             printf '%s\n' "ACCESS_ENVIRONMENT=production"
-            # 画面に並べる順番（VPS・DeskMini・Mac Mini・Pi Zero W の順、それ以外は識別子順）。秘密ではないため直接指定する
+            # 画面に並べる順番（VPS・サブPC・Mac Mini・Pi Zero W の順、それ以外は識別子順）。秘密ではないため直接指定する
             printf '%s\n' "HOST_STATS_ORDER=vps,subpc,macmini,pi0w"
             printf '%s\n' "APP_COMMIT_SHA=${APP_COMMIT_SHA}"
             for name in "${names[@]}"; do
