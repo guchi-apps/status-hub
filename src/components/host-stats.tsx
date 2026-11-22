@@ -128,7 +128,7 @@ function HostSection({
                                 異常 {problems}
                             </span>
                         )}
-                        <span className="text-xs font-mono text-muted-foreground truncate">
+                        <span className="text-xs font-mono text-muted-foreground truncate min-w-0">
                             {latest.hostname}
                         </span>
                         <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
