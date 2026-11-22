@@ -1,7 +1,7 @@
 // /auth 配下（callback・signout）は未ログイン状態で叩かれても安全なため素通りさせる。
 // /api/claude-usage はScriptableのウィジェットから叩く中継APIで、ログイン画面を通れないため
 // ここでは素通りさせ、ルート側で WIDGET_TOKEN による認証を行う。
-// /api/host-stats はサブPCのエージェントがメトリクスをPOSTする受け口で、同じくログイン画面を
+// /api/host-stats はDeskMiniのエージェントがメトリクスをPOSTする受け口で、同じくログイン画面を
 // 通れないため素通りさせ、ルート側で HOST_STATS_TOKEN による認証を行う。
 // /api/access/v1 は各アプリのサーバーが共通アクセス設定を引く契約API（#489）。ログイン画面を
 // 通れないため素通りさせ、ルート側でアプリ別トークンを照合する。管理用の /api/access/admin は

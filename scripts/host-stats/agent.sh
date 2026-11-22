@@ -2,7 +2,7 @@
 #
 # このホストのメトリクスを収集し、ops-dashboard の /api/host-stats へPOSTする。
 #
-# VPS・サブPCとも同じこのスクリプトを使う（push型に一本化）。サブPCは自宅LAN内（NAT配下）に
+# VPS・DeskMiniとも同じこのスクリプトを使う（push型に一本化）。DeskMiniは自宅LAN内（NAT配下）に
 # いてダッシュボードからポーリングできないため、ホスト側から送る形にしている。
 # VPS上ではダッシュボード自身が同じマシンで動いているため、送信先は localhost でよい。
 #
@@ -766,7 +766,7 @@ collect_sessions() {
 
 # tmuxのセッション一覧。
 #
-# サブPCはClaude Codeの作業セッションを常駐させるホストで、リポジトリをまたいだセッションが
+# DeskMiniはClaude Codeの作業セッションを常駐させるホストで、リポジトリをまたいだセッションが
 # 同じ tmux ls に並ぶ。いま何が動いているかが見えないと、二重起動や放置セッションに気づけない。
 #
 # 動いているかどうかはアタッチの有無では判断できない。デタッチしたまま裏でclaudeが走っているのが
@@ -1025,9 +1025,9 @@ collect_tmux() {
 
 # CPU温度は thermal_zone → hwmon の順に探す。
 #
-# **`/sys/class/thermal` を持たないマシンがある**（#101）。サブPC（AMD Athlon 200GE）では
+# **`/sys/class/thermal` を持たないマシンがある**（#101）。DeskMini（AMD Athlon 200GE）では
 # `k10temp` が hwmon にしか登録せず、`/sys/class/thermal` には `cooling_device*` しか無い。
-# thermal_zone だけを見ていたため、サブPCのカードにだけ温度が出ていなかった。
+# thermal_zone だけを見ていたため、DeskMiniのカードにだけ温度が出ていなかった。
 #
 # thermal_zone を持つVPS側は先に当たるため、従来と同じ経路のまま。
 
@@ -1052,7 +1052,7 @@ thermal_zone_temp_milli() {
 
 # hwmon の `name` から見たCPU温度センサーの優先順位。小さいほど優先し、0は対象外。
 #
-# **番号（hwmon0・hwmon1…）は検出順であってセンサーの種類を表さない。** サブPCでは hwmon1 が
+# **番号（hwmon0・hwmon1…）は検出順であってセンサーの種類を表さない。** DeskMiniでは hwmon1 が
 # 内蔵GPU（amdgpu）で、番号だけで選ぶとGPU温度をCPU温度として送ってしまう。必ず name を見る。
 hwmon_rank() {
     case "$1" in
