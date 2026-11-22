@@ -14,6 +14,14 @@ export interface ChangelogEntry {
 // 新しいバージョンを配列の先頭に追記していく（changelog-ja skill の運用ルールに従う）
 export const changelog: ChangelogEntry[] = [
     {
+        version: "0.60.2",
+        date: "2026-11-23",
+        changes: [
+            "ホストタブの見出しが改行されず、長いホスト名は省略表示されるようになりました。",
+            "AIDEタブの定期ジョブ欄などで、ホスト名の表記が「サブPC」から「DeskMini／Mac mini」に揃いました。",
+        ],
+    },
+    {
         version: "0.60.1",
         date: "2026-11-19",
         changes: [

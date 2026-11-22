@@ -1,6 +1,6 @@
 {
   "name": "ops-dashboard",
-  "version": "0.60.1",
+  "version": "0.60.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
