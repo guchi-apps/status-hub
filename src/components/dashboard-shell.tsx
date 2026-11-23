@@ -359,7 +359,7 @@ export function DashboardShell({
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12">
                         {hosts.map((host) => (
                             <div key={host.id} className={hostSpan}>
-                                <HostCard host={host} historyHours={hostStats?.historyHours ?? 24} />
+                                <HostCard host={host} />
                             </div>
                         ))}
 
