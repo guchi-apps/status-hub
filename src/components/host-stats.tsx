@@ -115,7 +115,7 @@ function HostSection({
     return (
         <section className="space-y-3 sm:space-y-4">
             <SectionHeading
-                title={`${host.label} Status`}
+                title={host.label}
                 trailing={
                     <>
                         {!online && (
