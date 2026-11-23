@@ -1,9 +1,11 @@
 "use client"
 
+import { OpenButton } from "@/components/panel"
 import { StatusBadge, StatusDot, type StatusTone } from "@/components/status-badge"
 import { UsageRing } from "@/components/usage-ring"
 import { formatAge, formatUptime } from "@/lib/host-stats/format"
 import { describeTimer, evaluateTimers, type TimerState, type TimerStatus } from "@/lib/host-stats/timers"
+import { shouldJumpOnClick } from "@/lib/section-anchors"
 import { cn } from "@/lib/utils"
 import type { HostSensorState, HostSensorsView, HostStatsHostView } from "@/types/host-stats"
 
@@ -101,7 +103,14 @@ function SensorList({ sensors }: { sensors: HostSensorsView | undefined }) {
  * 推移・ロード・転送量などの細かい値は、ホストタブの役目。
  * 異常（停止サービス・異常な定期ジョブ/センサー）だけは概要でも隠さない。
  */
-export function HostCard({ host }: { host: HostStatsHostView }) {
+export function HostCard({
+    host,
+    onOpen,
+}: {
+    host: HostStatsHostView
+    /** ホストタブの該当ホストへ移動する（#682）。カード全体と見出し右のボタンから呼ぶ */
+    onOpen?: () => void
+}) {
     const { latest, online } = host
 
     // 保存済みファイルが古い形式・壊れている場合に、画面全体を巻き込んで落とさないための保険
@@ -115,7 +124,22 @@ export function HostCard({ host }: { host: HostStatsHostView }) {
     const timerStatuses = evaluateTimers(latest.timers)
 
     return (
-        <div className={cn("h-full rounded-xl border border-border bg-card p-3", !online && "opacity-70")}>
+        <div
+            className={cn(
+                "h-full rounded-xl border border-border bg-card p-3",
+                !online && "opacity-70",
+                onOpen && "cursor-pointer transition-colors hover:border-highlight/50"
+            )}
+            onClick={
+                onOpen
+                    ? (event) => {
+                          if (shouldJumpOnClick(event.target as Element, !!window.getSelection()?.toString())) {
+                              onOpen()
+                          }
+                      }
+                    : undefined
+            }
+        >
             <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <StatusDot tone={online ? "ok" : "danger"} />
                 <span className="text-sm font-bold">{host.label}</span>
@@ -127,9 +151,15 @@ export function HostCard({ host }: { host: HostStatsHostView }) {
                         応答なし
                     </span>
                 )}
-                <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
+                <span
+                    className={cn(
+                        "truncate font-mono text-[10px] text-muted-foreground",
+                        !onOpen && "ml-auto"
+                    )}
+                >
                     稼働 {formatUptime(latest.uptimeSeconds)} · 受信 {formatAge(host.ageSeconds)}
                 </span>
+                {onOpen && <OpenButton onOpen={onOpen} label={`${host.label} の詳細をホストタブで開く`} />}
             </div>
 
             <div className="grid grid-cols-4 gap-2">

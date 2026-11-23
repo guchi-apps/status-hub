@@ -6,6 +6,7 @@ import { useDashboardData } from "@/components/dashboard-data"
 import { DashboardCard } from "@/components/dashboard-card"
 import { AccessDenied, SkeletonBar, SkeletonGroup } from "@/components/skeleton"
 import { SectionHeading } from "@/components/section-heading"
+import { SECTION_ANCHORS } from "@/lib/section-anchors"
 import { UsageBar } from "@/components/usage-bar"
 import {
     formatRemaining,
@@ -275,7 +276,7 @@ export function GitHubUsage() {
 
     if (!snapshot) {
         return (
-            <section className="space-y-3 sm:space-y-4">
+            <section id={SECTION_ANCHORS.githubUsage} className="scroll-mt-28 space-y-3 sm:space-y-4">
                 <SectionHeading title="GitHub" />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     {[0, 1].map((index) => (
@@ -292,7 +293,7 @@ export function GitHubUsage() {
     }
 
     return (
-        <section className="space-y-3 sm:space-y-4">
+        <section id={SECTION_ANCHORS.githubUsage} className="scroll-mt-28 space-y-3 sm:space-y-4">
             <SectionHeading
                 title="GitHub"
                 trailing={
