@@ -261,7 +261,6 @@ export function DashboardShell({
 
         let attempts = 0
         let frame = 0
-        let timer: number | undefined
         const run = () => {
             const target = document.getElementById(jump.anchorId)
             if (!target) {
@@ -271,13 +270,10 @@ export function DashboardShell({
             }
             const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
             target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" })
-            target.classList.add("jump-highlight")
-            timer = window.setTimeout(() => target.classList.remove("jump-highlight"), 1500)
         }
         frame = requestAnimationFrame(run)
         return () => {
             cancelAnimationFrame(frame)
-            window.clearTimeout(timer)
         }
     }, [activeTab])
 
@@ -408,13 +404,12 @@ export function DashboardShell({
                                 title="tmux セッション"
                                 className={hosts.length >= 2 ? "xl:col-span-4" : "xl:col-span-6"}
                                 onOpen={() => goToSection("tmux", SECTION_ANCHORS.tmux)}
-                                openLabel="tmux セッションの詳細をtmuxタブで開く"
                                 trailing={
                                     <>
                                         <StatusBadge tone={tmuxSummary.running > 0 ? "ok" : "neutral"}>
                                             稼働 {tmuxSummary.running}
                                         </StatusBadge>
-                                        <span className="font-mono text-[10px] text-muted-foreground">
+                                        <span className="ml-auto font-mono text-[10px] text-muted-foreground">
                                             入力待ち {tmuxSummary.waiting} · 待機{" "}
                                             {tmuxSummary.idle + tmuxSummary.stale} · 全
                                             {tmuxSummary.total}件
@@ -453,9 +448,8 @@ export function DashboardShell({
                                         title="AI 使用状況"
                                         className="xl:col-span-3"
                                         onOpen={() => goToSection("usage", SECTION_ANCHORS.aiUsage)}
-                                        openLabel="AI 使用状況の詳細を利用枠タブで開く"
                                         trailing={
-                                            <span className="font-mono text-[10px] text-muted-foreground">
+                                            <span className="ml-auto font-mono text-[10px] text-muted-foreground">
                                                 {new Date(aiUsage.fetchedAt).toLocaleTimeString("ja-JP", {
                                                     hour: "2-digit",
                                                     minute: "2-digit",
@@ -471,7 +465,6 @@ export function DashboardShell({
                                         title="AI 使用状況"
                                         className="xl:col-span-3"
                                         onOpen={() => goToSection("usage", SECTION_ANCHORS.aiUsage)}
-                                        openLabel="AI 使用状況の詳細を利用枠タブで開く"
                                     >
                                         <SkeletonGroup label="AI使用状況" className="space-y-3">
                                             <SkeletonBar />
@@ -485,9 +478,8 @@ export function DashboardShell({
                                         title="GitHub"
                                         className="xl:col-span-3"
                                         onOpen={() => goToSection("usage", SECTION_ANCHORS.githubUsage)}
-                                        openLabel="GitHub の詳細を利用枠タブで開く"
                                         trailing={
-                                            <span className="truncate font-mono text-[10px] text-muted-foreground">
+                                            <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
                                                 {githubUsage.org ?? ""}
                                             </span>
                                         }
@@ -499,7 +491,6 @@ export function DashboardShell({
                                         title="GitHub"
                                         className="xl:col-span-3"
                                         onOpen={() => goToSection("usage", SECTION_ANCHORS.githubUsage)}
-                                        openLabel="GitHub の詳細を利用枠タブで開く"
                                     >
                                         <SkeletonGroup label="GitHub使用状況" className="space-y-3">
                                             <SkeletonBar />
@@ -513,7 +504,6 @@ export function DashboardShell({
                                 title="監視"
                                 className="xl:col-span-6"
                                 onOpen={() => goToSection("monitors", SECTION_ANCHORS.monitors)}
-                                openLabel="監視の詳細を監視タブで開く"
                                 trailing={
                                     <>
                                         {monitorStatus.down > 0 && (
@@ -523,7 +513,7 @@ export function DashboardShell({
                                             <StatusBadge tone="danger">取得不可</StatusBadge>
                                         )}
                                         {monitorStatus.text !== null && (
-                                            <span className="font-mono text-[10px] text-muted-foreground">
+                                            <span className="ml-auto font-mono text-[10px] text-muted-foreground">
                                                 {monitorStatus.text}
                                             </span>
                                         )}

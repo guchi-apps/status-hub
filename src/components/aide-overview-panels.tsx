@@ -132,7 +132,6 @@ function JobsOverview({
             id="overview-aide-jobs"
             className={className}
             onOpen={onOpen}
-            openLabel="定期ジョブの詳細をAIDEタブで開く"
             trailing={
                 <>
                     {failedBadge}
@@ -141,7 +140,7 @@ function JobsOverview({
                             {AIDE_SEVERITY_LABEL[severity]}
                         </StatusBadge>
                     )}
-                    {jobs && <span className="font-mono text-[10px] text-muted-foreground">全{jobs.length}件</span>}
+                    {jobs && <span className="ml-auto font-mono text-[10px] text-muted-foreground">全{jobs.length}件</span>}
                 </>
             }
         >
@@ -195,7 +194,6 @@ function ConnectorsOverview({
             id="overview-aide-connectors"
             className={className}
             onOpen={onOpen}
-            openLabel="接続先の詳細・疎通確認をAIDEタブで開く"
             trailing={
                 <>
                     {failedBadge}
