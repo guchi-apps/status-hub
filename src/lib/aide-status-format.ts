@@ -1,4 +1,4 @@
-import type { AideSeverity } from "@/types/aide-status"
+import type { AideJob, AideSeverity } from "@/types/aide-status"
 
 /** AIDEの判定をダッシュボードの状態色へ。unknown（材料が無い）は異常ではないので色を付けない */
 export const AIDE_SEVERITY_TONE: Record<AideSeverity, "ok" | "warn" | "danger" | "neutral"> = {
@@ -44,4 +44,12 @@ export function formatAideLogTime(iso: string, now: number): string {
     const [date, time] = JST_FORMAT.format(new Date(iso)).split(" ")
     const today = JST_FORMAT.format(new Date(now)).split(" ")[0]
     return date === today ? (time ?? "") : `${date?.slice(5)} ${time}`
+}
+
+/** 定期ジョブ1件の状態を表す短い語。AIDEタブと概要で同じ表記にする */
+export function jobLabel(job: AideJob): string {
+    if (!job.lastRun) return AIDE_SEVERITY_LABEL[job.severity]
+    if (!job.lastRun.ok) return "失敗"
+    // 成功しているが間隔ぶん動いていない。「成功」のまま黄色にすると何が悪いのか読めない
+    return job.severity === "warn" ? "遅れ" : "成功"
 }

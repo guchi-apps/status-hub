@@ -13,6 +13,8 @@ export const SECTION_ANCHORS = {
     aiUsage: "section-ai-usage",
     githubUsage: "section-github-usage",
     monitors: "section-monitors",
+    aideJobs: "section-aide-jobs",
+    aideConnectors: "section-aide-connectors",
 } as const
 
 /** カードの中にあって、押したときは遷移ではなく本来の操作をしてほしい要素 */
