@@ -13,6 +13,7 @@ import { HostStats } from "@/components/host-stats"
 import { useIncidentBadgeSync } from "@/components/incidents"
 import { ModelPriceMenuItem } from "@/components/model-price-dialog"
 import { MonitorSections } from "@/components/monitor-sections"
+import { AideOverviewPanels } from "@/components/aide-overview-panels"
 import { MonitorTiles, getMonitorStatusText } from "@/components/monitor-tiles"
 import { OnePasswordUsage } from "@/components/onepassword-usage"
 import { Panel } from "@/components/panel"
@@ -444,89 +445,103 @@ export function DashboardShell({
                             </Panel>
                         )}
 
-                        {aiUsage ? (
+                        {/* 下段。iPad横（1180px）はxlに届かないため、左半分にAI・GitHubを縦に重ね、
+                            右半分に監視を置く（#685）。xl以上は子をそのまま12列へ並べる */}
+                        <div className="grid grid-cols-1 gap-3 md:col-span-2 md:grid-cols-2 xl:col-span-12 xl:grid-cols-12">
+                            <div className="flex min-w-0 flex-col gap-3 xl:contents">
+                                {aiUsage ? (
+                                    <Panel
+                                        title="AI 使用状況"
+                                        className="xl:col-span-3"
+                                        onOpen={() => goToSection("usage", SECTION_ANCHORS.aiUsage)}
+                                        openLabel="AI 使用状況の詳細を利用枠タブで開く"
+                                        trailing={
+                                            <span className="font-mono text-[10px] text-muted-foreground">
+                                                {new Date(aiUsage.fetchedAt).toLocaleTimeString("ja-JP", {
+                                                    hour: "2-digit",
+                                                    minute: "2-digit",
+                                                })}{" "}
+                                                時点
+                                            </span>
+                                        }
+                                    >
+                                        <AiUsageCompact snapshot={aiUsage} now={now} />
+                                    </Panel>
+                                ) : (
+                                    <Panel
+                                        title="AI 使用状況"
+                                        className="xl:col-span-3"
+                                        onOpen={() => goToSection("usage", SECTION_ANCHORS.aiUsage)}
+                                        openLabel="AI 使用状況の詳細を利用枠タブで開く"
+                                    >
+                                        <SkeletonGroup label="AI使用状況" className="space-y-3">
+                                            <SkeletonBar />
+                                            <SkeletonBar />
+                                        </SkeletonGroup>
+                                    </Panel>
+                                )}
+
+                                {githubUsage?.status === "unconfigured" ? null : githubUsage ? (
+                                    <Panel
+                                        title="GitHub"
+                                        className="xl:col-span-3"
+                                        onOpen={() => goToSection("usage", SECTION_ANCHORS.githubUsage)}
+                                        openLabel="GitHub の詳細を利用枠タブで開く"
+                                        trailing={
+                                            <span className="truncate font-mono text-[10px] text-muted-foreground">
+                                                {githubUsage.org ?? ""}
+                                            </span>
+                                        }
+                                    >
+                                        <GitHubUsageCompact snapshot={githubUsage} now={now} />
+                                    </Panel>
+                                ) : (
+                                    <Panel
+                                        title="GitHub"
+                                        className="xl:col-span-3"
+                                        onOpen={() => goToSection("usage", SECTION_ANCHORS.githubUsage)}
+                                        openLabel="GitHub の詳細を利用枠タブで開く"
+                                    >
+                                        <SkeletonGroup label="GitHub使用状況" className="space-y-3">
+                                            <SkeletonBar />
+                                            <SkeletonBar />
+                                        </SkeletonGroup>
+                                    </Panel>
+                                )}
+                            </div>
+
                             <Panel
-                                title="AI 使用状況"
-                                className="xl:col-span-3"
-                                onOpen={() => goToSection("usage", SECTION_ANCHORS.aiUsage)}
-                                openLabel="AI 使用状況の詳細を利用枠タブで開く"
+                                title="監視"
+                                className="xl:col-span-6"
+                                onOpen={() => goToSection("monitors", SECTION_ANCHORS.monitors)}
+                                openLabel="監視の詳細を監視タブで開く"
                                 trailing={
-                                    <span className="font-mono text-[10px] text-muted-foreground">
-                                        {new Date(aiUsage.fetchedAt).toLocaleTimeString("ja-JP", {
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                        })}{" "}
-                                        時点
-                                    </span>
+                                    <>
+                                        {monitorStatus.down > 0 && (
+                                            <StatusBadge tone="danger">DOWN {monitorStatus.down}</StatusBadge>
+                                        )}
+                                        {monitorStatus.failed && (
+                                            <StatusBadge tone="danger">取得不可</StatusBadge>
+                                        )}
+                                        {monitorStatus.text !== null && (
+                                            <span className="font-mono text-[10px] text-muted-foreground">
+                                                {monitorStatus.text}
+                                            </span>
+                                        )}
+                                    </>
                                 }
                             >
-                                <AiUsageCompact snapshot={aiUsage} now={now} />
+                                <MonitorTiles kuma={uptimeKuma} robot={uptimeRobot} />
                             </Panel>
-                        ) : (
-                            <Panel
-                                title="AI 使用状況"
-                                className="xl:col-span-3"
-                                onOpen={() => goToSection("usage", SECTION_ANCHORS.aiUsage)}
-                                openLabel="AI 使用状況の詳細を利用枠タブで開く"
-                            >
-                                <SkeletonGroup label="AI使用状況" className="space-y-3">
-                                    <SkeletonBar />
-                                    <SkeletonBar />
-                                </SkeletonGroup>
-                            </Panel>
-                        )}
 
-                        {githubUsage?.status === "unconfigured" ? null : githubUsage ? (
-                            <Panel
-                                title="GitHub"
-                                className="xl:col-span-3"
-                                onOpen={() => goToSection("usage", SECTION_ANCHORS.githubUsage)}
-                                openLabel="GitHub の詳細を利用枠タブで開く"
-                                trailing={
-                                    <span className="truncate font-mono text-[10px] text-muted-foreground">
-                                        {githubUsage.org ?? ""}
-                                    </span>
-                                }
-                            >
-                                <GitHubUsageCompact snapshot={githubUsage} now={now} />
-                            </Panel>
-                        ) : (
-                            <Panel
-                                title="GitHub"
-                                className="xl:col-span-3"
-                                onOpen={() => goToSection("usage", SECTION_ANCHORS.githubUsage)}
-                                openLabel="GitHub の詳細を利用枠タブで開く"
-                            >
-                                <SkeletonGroup label="GitHub使用状況" className="space-y-3">
-                                    <SkeletonBar />
-                                    <SkeletonBar />
-                                </SkeletonGroup>
-                            </Panel>
-                        )}
-
-                        <Panel
-                            title="監視"
-                            className="md:col-span-2 xl:col-span-6"
-                            onOpen={() => goToSection("monitors", SECTION_ANCHORS.monitors)}
-                            openLabel="監視の詳細を監視タブで開く"
-                            trailing={
-                                <>
-                                    {monitorStatus.down > 0 && (
-                                        <StatusBadge tone="danger">DOWN {monitorStatus.down}</StatusBadge>
-                                    )}
-                                    {monitorStatus.failed && (
-                                        <StatusBadge tone="danger">取得不可</StatusBadge>
-                                    )}
-                                    {monitorStatus.text !== null && (
-                                        <span className="font-mono text-[10px] text-muted-foreground">
-                                            {monitorStatus.text}
-                                        </span>
-                                    )}
-                                </>
-                            }
-                        >
-                            <MonitorTiles kuma={uptimeKuma} robot={uptimeRobot} />
-                        </Panel>
+                            {aideConfigured && (
+                                <AideOverviewPanels
+                                    snapshot={aideStatus}
+                                    onOpen={(anchorId) => goToSection("aide", anchorId)}
+                                    className="xl:col-span-6"
+                                />
+                            )}
+                        </div>
                     </div>
                 )}
 

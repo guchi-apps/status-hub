@@ -15,7 +15,9 @@ import {
     formatAideDateTime,
     formatAideDuration,
     formatAideLogTime,
+    jobLabel,
 } from "@/lib/aide-status-format"
+import { SECTION_ANCHORS } from "@/lib/section-anchors"
 import { cn } from "@/lib/utils"
 import type {
     AideCache,
@@ -299,13 +301,6 @@ function ErrorPanel({ snapshot, now }: { snapshot: AideStatusSnapshot; now: numb
     )
 }
 
-function jobLabel(job: AideJob): string {
-    if (!job.lastRun) return AIDE_SEVERITY_LABEL[job.severity]
-    if (!job.lastRun.ok) return "失敗"
-    // 成功しているが間隔ぶん動いていない。「成功」のまま黄色にすると何が悪いのか読めない
-    return job.severity === "warn" ? "遅れ" : "成功"
-}
-
 function JobsPanel({ jobs }: { jobs: AideJob[] }) {
     const [selectedName, setSelectedName] = useState<string | null>(null)
     const closeModal = useCallback(() => setSelectedName(null), [])
@@ -318,6 +313,7 @@ function JobsPanel({ jobs }: { jobs: AideJob[] }) {
     return (
         <Panel
             title="定期ジョブ"
+            id={SECTION_ANCHORS.aideJobs}
             className="md:col-span-2 xl:col-span-8"
             trailing={
                 <>
@@ -688,6 +684,7 @@ function ConnectorsPanel({ connectors, now }: { connectors: AideConnector[]; now
     return (
         <Panel
             title="接続先"
+            id={SECTION_ANCHORS.aideConnectors}
             className="xl:col-span-8"
             trailing={
                 <>

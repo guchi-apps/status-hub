@@ -105,7 +105,7 @@ export function MonitorTiles({
     return (
         <div className="space-y-2">
             {failureNotice}
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-2 xl:grid-cols-5 2xl:grid-cols-6">
                 {tiles.map((tile) => (
                     <a
                         key={tile.key}
