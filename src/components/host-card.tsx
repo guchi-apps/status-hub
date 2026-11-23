@@ -1,6 +1,5 @@
 "use client"
 
-import { OpenButton } from "@/components/panel"
 import { StatusBadge, StatusDot, type StatusTone } from "@/components/status-badge"
 import { UsageRing } from "@/components/usage-ring"
 import { formatAge, formatUptime } from "@/lib/host-stats/format"
@@ -157,7 +156,6 @@ export function HostCard({
                 <span className="shrink-0 whitespace-nowrap font-mono text-[10px] text-muted-foreground">
                     稼働 {formatUptime(latest.uptimeSeconds)} · 受信 {formatAge(host.ageSeconds)}
                 </span>
-                {onOpen && <OpenButton onOpen={onOpen} label={`${host.label} の詳細をホストタブで開く`} />}
             </div>
 
             <div className="grid grid-cols-4 gap-2">
