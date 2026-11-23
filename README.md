@@ -82,7 +82,7 @@ VPS上ではダッシュボード自身が同じマシンで動いているの�
   systemd timer（Linux）/ launchd（macOS）
     └─ scripts/host-stats/agent.sh（Linux）
        scripts/host-stats/agent-macos.sh（macOS）
-         /proc・df・systemctl・tmux（Linux） / sysctl・vm_stat・df（macOS）から収集
+         /proc・df・systemctl・tmux（Linux） / sysctl・vm_stat・df・ps（macOS）から収集
          → POST /api/host-stats（Bearer HOST_STATS_TOKEN）
                                                  └─ .data/host-stats/<識別子>/latest.json
                                                     .data/host-stats/<識別子>/history.jsonl
@@ -366,8 +366,16 @@ macOSには `/proc`・`systemctl`・`/sys/class/*` が無く、`agent.sh` はそ
 | Load Average | `/proc/loadavg` | `sysctl vm.loadavg` |
 | 稼働時間 | `/proc/uptime` | `sysctl kern.boottime` と現在時刻の差 |
 | ログイン中のセッション | `who` | `who`（共通） |
+| サービスの死活 | `systemctl is-active`（`HOST_STATS_SERVICES` はユニット名） | `ps -Aco comm=` のプロセス名を照合（`HOST_STATS_SERVICES` は `表示名:プロセス名の正規表現`。#676） |
+| 上位プロセス（CPU順・メモリ順） | `ps --sort`（`etimes` で10秒未満を除く） | `ps -Aceo etime=,pcpu=,rss=,comm=`（`etime` を秒に直して10秒未満を除く。#676） |
 
-**温度・サービス死活・定期ジョブ・アプリ別リソース・tmuxセッションはmacOS版では送らない。** いずれもペイロード上は
+**`HOST_STATS_SERVICES` の書式は agent.sh と別物。** Linux版はsystemdのユニット名（`tailscaled,cron`）だが、macOS版は
+`tailscale:tailscaled|IPNExtension|Tailscale,cron` のように「表示名:プロセス名の正規表現」を並べる（コロン以降を
+省くと表示名と同じ）。Tailscaleは入れ方（App Store版・スタンドアロン版・`tailscaled`）で常駐プロセス名が変わるため、
+実機で `ps -Aco comm=` を見て合わせる。cronはcrontab（`/usr/lib/cron/tabs`）が1つも無い間は launchd が起こさず
+動いていないのが正常なため、停止とは扱わず `listening`（待機）として送る。
+
+**温度・定期ジョブ・アプリ別リソース・tmuxセッションはmacOS版では送らない。** いずれもペイロード上は
 任意項目で、送らなければそのホストにはその項目・カードが出ないだけで受信自体は失敗しない（「表示する項目」参照）。
 必要になれば別途対応する。
 
