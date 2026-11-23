@@ -4,9 +4,10 @@
 #
 # scripts/host-stats/agent.sh のmacOS版。agent.sh は /proc・systemctl・/sys/class/* に強く
 # 依存しており、いずれもmacOSには無いためそのままでは動かない。送信先のペイロード形式
-# （HostStatsReport）は共通だが、macOSに対応する取得手段が無い項目（CPU温度・systemdサービス
-# 相当・定期ジョブ・アプリ別リソース・tmuxセッション集計）は送らない。いずれもダッシュボード側では
-# 任意項目として扱われ、送らなければその項目・カードが出ないだけで受信自体は失敗しない
+# （HostStatsReport）は共通。稼働サービス（HOST_STATS_SERVICES）と上位プロセス（CPU順・メモリ順）は
+# macOS向けに実装して送る（#676）。macOSに対応する取得手段が無い項目（CPU温度・定期ジョブ・
+# アプリ別リソース・tmuxセッション集計）は送らない。いずれもダッシュボード側では任意項目として
+# 扱われ、送らなければその項目・カードが出ないだけで受信自体は失敗しない
 # （README「ホスト（VPS・DeskMini）のステータス表示」の「macOS（Mac mini）への設置」を参照）。
 #
 # 設定は環境変数で渡す（launchd から `set -a; . <envファイル>; set +a` で読み込んでから
@@ -16,6 +17,10 @@
 #   HOST_STATS_ID           任意。保存先を分ける識別子。英小文字・数字・-・_（既定: ホスト名から生成）
 #   HOST_STATS_LABEL        任意。画面の見出しに使う表示名（既定: ホスト名）
 #   HOST_STATS_DISK_PATHS   任意。監視するマウントポイントをカンマ区切りで（既定: /）
+#   HOST_STATS_SERVICES     任意。稼働を見るサービスをカンマ区切りで。書式は agent.sh（systemdユニット名）と
+#                           別物で、「表示名:プロセス名の正規表現」（コロン以降を省くと表示名と同じ）。
+#                           例: tailscale:tailscaled|IPNExtension|Tailscale,cron
+#                           未設定なら services を送らない
 #   HOST_STATS_TIMEOUT      任意。送信のタイムアウト秒（既定: 15）
 #
 # `--print` を付けて実行すると、送信せずに組み立てたJSONを表示する（設置時の確認用）。
@@ -30,7 +35,17 @@ SAMPLE_SECONDS=1
 : "${OPS_DASHBOARD_URL:?OPS_DASHBOARD_URL が未設定です}"
 : "${HOST_STATS_TOKEN:?HOST_STATS_TOKEN が未設定です}"
 DISK_PATHS="${HOST_STATS_DISK_PATHS:-/}"
+SERVICES="${HOST_STATS_SERVICES:-}"
 TIMEOUT="${HOST_STATS_TIMEOUT:-15}"
+
+# 上位プロセスの対象にする最低の経過時間（秒）と、CPU順・メモリ順それぞれの件数。
+# ダッシュボード側の上限と合わせる（agent.sh と同じ値）
+MIN_PROCESS_AGE_SECONDS=10
+MAX_TOP_PROCESSES=5
+
+# macOSのcronは、crontab（ユーザーごとのファイル）があるときだけ launchd が起こす。
+# crontabが1つも無い間は動いていないのが正常なため、停止とは扱わない
+CRON_TABS_DIR="${HOST_STATS_CRON_TABS_DIR:-/usr/lib/cron/tabs}"
 
 HOSTNAME_VALUE="$(hostname)"
 HOST_ID="${HOST_STATS_ID:-$(printf '%s' "$HOSTNAME_VALUE" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-' | sed 's/-*$//')}"
@@ -172,6 +187,81 @@ collect_sessions() {
     printf ']}'
 }
 
+# 実行中のプロセス名（実行ファイル名のみ。引数は含めない）の一覧。サービスの死活判定に使う
+running_process_names() {
+    ps -Aco comm= 2>/dev/null | sed 's/^[[:space:]]*//'
+}
+
+# crontab が1つでもあるか。ディレクトリを読めない場合は「ある」として、停止を見逃さない側に倒す
+cron_has_tabs() {
+    [ -d "$CRON_TABS_DIR" ] || return 1
+    [ -n "$(ls -A "$CRON_TABS_DIR" 2>/dev/null || true)" ] || return 1
+}
+
+# 「表示名:プロセス名の正規表現」を解釈し、動いていれば active、いなければ inactive を返す。
+# cron だけは、crontab が無く動いていないなら listening（待機。ダッシュボード側では稼働中に数える）
+service_state() {
+    local name="$1" pattern="$2"
+
+    if running_process_names | grep -Eq "^(${pattern})$"; then
+        printf 'active'
+    elif [ "$name" = "cron" ] && ! cron_has_tabs; then
+        printf 'listening'
+    else
+        printf 'inactive'
+    fi
+}
+
+collect_services() {
+    local first=1 entry name pattern state
+    while IFS= read -r entry; do
+        [ -n "$entry" ] || continue
+        name="${entry%%:*}"
+        pattern="${entry#*:}"
+        [ "$entry" != "$name" ] || pattern="$name"
+        [ -n "$name" ] && [ -n "$pattern" ] || continue
+
+        state="$(service_state "$name" "$pattern")"
+
+        if [ "$first" -eq 1 ]; then printf '['; else printf ','; fi
+        first=0
+        printf '{"name":"%s","state":"%s"}' "$(json_escape "$name")" "$(json_escape "$state")"
+    done < <(printf '%s\n' "$SERVICES" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    [ "$first" -eq 1 ] || printf ']'
+}
+
+# 上位プロセスをJSON配列で返す。macOSのpsには etimes が無いため、etime（[[dd-]hh:]mm:ss）を秒に直して
+# 起動から MIN_PROCESS_AGE_SECONDS 経っていないプロセス（自分が呼んだ ps など）を除く。
+# -c は実行ファイル名だけを返す（空白を含む名前があるため、名前は4列目以降をまとめて取る）。
+# CPU順とメモリ順の2本を送る理由は agent.sh と同じ（メモリを食い潰す犯人がCPU順に出てこないため）。
+#
+# $1: 並べ替えに使う列（2=%CPU・3=RSS）
+top_processes_json() {
+    ps -Aceo etime=,pcpu=,rss=,comm= 2>/dev/null |
+        awk -v min_age="$MIN_PROCESS_AGE_SECONDS" -v key="$1" '
+            function seconds(t,   days, parts, n) {
+                days = 0
+                if (index(t, "-")) { split(t, parts, "-"); days = parts[1]; t = parts[2] }
+                n = split(t, parts, ":")
+                if (n == 3) return days * 86400 + parts[1] * 3600 + parts[2] * 60 + parts[3]
+                if (n == 2) return days * 86400 + parts[1] * 60 + parts[2]
+                return days * 86400 + parts[1]
+            }
+            NF >= 4 && seconds($1) >= min_age && $key > 0 {
+                name = $4
+                for (i = 5; i <= NF; i++) name = name " " $i
+                gsub(/[\\"]/, "", name)
+                printf "%s\t%s\t%s\n", $2, $3, name
+            }' |
+        sort -t "$(printf '\t')" -k"$(( $1 - 1 ))","$(( $1 - 1 ))"nr |
+        head -n "$MAX_TOP_PROCESSES" |
+        awk -F '\t' '{
+            # RSS は KiB で返るためバイトに直す
+            printf "%s{\"name\":\"%s\",\"cpuPercent\":%.1f,\"memoryBytes\":%d}", (count++ ? "," : "["), $3, $1, $2 * 1024
+        }
+        END { printf "%s", (count ? "]" : "[]") }'
+}
+
 os_name() {
     local name version
     name="$(sw_vers -productName 2>/dev/null || true)"
@@ -181,8 +271,11 @@ os_name() {
 }
 
 build_payload() {
-    local swap cpu_model cpu_threads
+    local swap cpu_model cpu_threads services
     swap="$(collect_swap)"
+
+    # HOST_STATS_SERVICES 未設定のホストでは空になり、項目ごと送らない
+    services="$(collect_services)"
 
     printf '{'
     printf '"version":%d,' "$PAYLOAD_VERSION"
@@ -203,7 +296,10 @@ build_payload() {
     printf '"network":%s,' "$(collect_network)"
     printf '"loadAverage":[%s],' "$(collect_load_average)"
     printf '"uptimeSeconds":%d,' "$(collect_uptime_seconds)"
+    printf '"topProcesses":%s,' "$(top_processes_json 2)"
+    printf '"topMemoryProcesses":%s,' "$(top_processes_json 3)"
     printf '"sessions":%s' "$(collect_sessions)"
+    [ -z "$services" ] || printf ',"services":%s' "$services"
     printf '}'
 }
 
