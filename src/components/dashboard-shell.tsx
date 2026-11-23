@@ -398,7 +398,6 @@ export function DashboardShell({
                             <div key={host.id} className={hostSpan}>
                                 <HostCard
                                     host={host}
-                                    historyHours={hostStats?.historyHours ?? 24}
                                     onOpen={() => goToSection("hosts", hostAnchorId(host.id))}
                                 />
                             </div>
