@@ -363,6 +363,7 @@ macOSには `/proc`・`systemctl`・`/sys/class/*` が無く、`agent.sh` はそ
 | メモリ使用率 | `/proc/meminfo` | `vm_stat` + `sysctl hw.memsize`（Activity Monitorの「使用中のメモリ」に合わせ、アクティブ+Wired+圧縮の合計） |
 | Swap使用率 | `/proc/meminfo` | `sysctl vm.swapusage`。使っていなければ送らない |
 | ディスク使用率 | `df -B1 -P` | `df -k` |
+| ネットワーク（受信・送信の速度） | `/proc/net/dev` | `netstat -ib`（物理NIC `en*` のリンク層の行を合算し、1秒あけた2回の差分。#680） |
 | Load Average | `/proc/loadavg` | `sysctl vm.loadavg` |
 | 稼働時間 | `/proc/uptime` | `sysctl kern.boottime` と現在時刻の差 |
 | ログイン中のセッション | `who` | `who`（共通） |
