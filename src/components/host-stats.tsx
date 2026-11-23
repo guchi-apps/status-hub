@@ -131,9 +131,16 @@ function HostSection({
                         <span className="text-xs font-mono text-muted-foreground truncate min-w-0">
                             {latest.hostname}
                         </span>
-                        <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
-                            受信 {formatAge(host.ageSeconds)}
-                        </span>
+                        {/* 稼働時間は専用カードをやめ、ここに出す（#679）。押すとOS・カーネルの詳細を開く */}
+                        <button
+                            type="button"
+                            aria-haspopup="dialog"
+                            aria-label={labelFor("uptime")}
+                            onClick={(event) => openCard("uptime")(event.currentTarget)}
+                            className="text-xs font-mono text-muted-foreground whitespace-nowrap hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+                        >
+                            稼働 {formatUptime(latest.uptimeSeconds)} · 受信 {formatAge(host.ageSeconds)}
+                        </button>
                     </>
                 }
             />
@@ -142,7 +149,7 @@ function HostSection({
                 <OfflineBanner ageSeconds={host.ageSeconds} offlineAfterSeconds={offlineAfterSeconds} />
             )}
 
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
                 <MetricCard
                     label="CPU"
                     value={`${latest.cpuPercent}%`}
@@ -261,14 +268,6 @@ function HostSection({
                         }
                     />
                 )}
-                <MetricCard
-                    label="Uptime"
-                    value={formatUptime(latest.uptimeSeconds)}
-                    detail={latest.os ?? latest.kernel}
-                    dimmed={dimmed}
-                    onOpen={openCard("uptime")}
-                    openLabel={labelFor("uptime")}
-                />
                 {latest.temperatureCelsius !== undefined && (
                     <MetricCard
                         label="Temp"
