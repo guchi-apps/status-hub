@@ -153,6 +153,7 @@ export function DashboardShell({
     addMonitorUrl,
     canAddMonitor,
     aideConfigured,
+    aideWorkerControlConfigured,
 }: {
     userEmail: string
     /** 共通アクセス設定でStatusHubの管理者か（#489）。メニューに管理画面への行を出す */
@@ -162,6 +163,8 @@ export function DashboardShell({
     canAddMonitor: boolean
     /** AIDEの動作状況を読むトークンがあるか。無ければAIDEタブを出さない */
     aideConfigured: boolean
+    /** AIDEの担当ホストを切り替えるトークンがあるか（#668）。管理者でもこれが無ければ切り替えを出さない */
+    aideWorkerControlConfigured: boolean
 }) {
     const data = useDashboardData()
     const {
@@ -247,6 +250,9 @@ export function DashboardShell({
     const monitorStatus = getMonitorStatusText(uptimeKuma, uptimeRobot)
 
     const aideHealth = aideStatus?.status === "ok" ? aideStatus.health : null
+    // 担当ホストの固定は解除し忘れに気づけるよう、どのタブを開いていてもタブ帯に出す（#668）
+    const aideWorkerMode = aideStatus?.workerAssignment?.assignment?.mode
+    const aideWorkerFixed = aideWorkerMode !== undefined && aideWorkerMode !== "auto"
 
     const counts: Partial<Record<TabId, number>> = {
         hosts: hosts.length,
@@ -316,6 +322,14 @@ export function DashboardShell({
                             )}
                         >
                             {TAB_LABELS[tab]}
+                            {tab === "aide" && aideWorkerFixed && (
+                                <span
+                                    className="ml-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-px text-[10px] font-bold text-amber-300"
+                                    title="AIDEの定期ジョブの担当ホストを固定しています"
+                                >
+                                    固定
+                                </span>
+                            )}
                             {counts[tab] !== undefined && counts[tab]! > 0 && (
                                 <span
                                     className={cn(
@@ -516,7 +530,13 @@ export function DashboardShell({
                     />
                 )}
 
-                {activeTab === "aide" && <AideStatus />}
+                {activeTab === "aide" && (
+                    <AideStatus
+                        workerSwitch={
+                            !isAdmin ? "not-admin" : aideWorkerControlConfigured ? "available" : "unconfigured"
+                        }
+                    />
+                )}
             </SwipeTabs>
         </div>
     )
