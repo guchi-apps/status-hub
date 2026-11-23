@@ -122,7 +122,7 @@ describe("ホスト停止・再起動の検知", () => {
     })
 
     it("正常終了か異常終了かを断定しない文面になる", () => {
-        const event = { id: "x", hostId: "sub-pc", label: "サブPC", kind: "restart" as const, at: new Date(T0).toISOString(), lastReceivedAt: new Date(T0 - MIN).toISOString() }
+        const event = { id: "x", hostId: "sub-pc", label: "DeskMini", kind: "restart" as const, at: new Date(T0).toISOString(), lastReceivedAt: new Date(T0 - MIN).toISOString() }
         const message = buildHostMessage(event, { count: 2, seq: 7 })
         assert.match(message.title, /再起動/)
         assert.match(message.body, /不明/)

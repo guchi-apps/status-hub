@@ -53,7 +53,7 @@ export function MetricCard({
     const card = (
         <DashboardCard
             className={cn(
-                "h-full flex flex-col justify-center items-center text-center px-3 py-4 sm:px-4 sm:py-5",
+                "h-full flex flex-col justify-center items-center text-center px-3 py-2.5 sm:px-4 sm:py-3 leading-tight",
                 dimmed && "opacity-60",
                 alert === "danger" && "border-red-500/60",
                 alert === "warn" && "border-amber-400/60",
@@ -68,18 +68,18 @@ export function MetricCard({
                     ›
                 </span>
             )}
-            <span className="text-[10px] sm:text-xs opacity-70 uppercase tracking-widest mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs opacity-70 uppercase tracking-widest mb-0.5 sm:mb-1">
                 {label}
             </span>
             <div className={cn("text-xl sm:text-2xl font-bold font-mono break-all", valueClassName)}>
                 {value}
             </div>
             {detail && (
-                <div className="text-xs sm:text-sm font-medium text-muted-foreground mt-1.5 sm:mt-2 break-words">
+                <div className="text-xs sm:text-sm font-medium text-muted-foreground mt-0.5 sm:mt-1 break-words">
                     {detail}
                 </div>
             )}
-            {chart && <div className="w-full mt-2 sm:mt-3">{chart}</div>}
+            {chart && <div className="w-full mt-1.5 sm:mt-2">{chart}</div>}
         </DashboardCard>
     )
 

@@ -3,6 +3,7 @@
 import { CSRF_HEADERS } from "@/lib/csrf-headers"
 import { Fragment, useCallback, useState } from "react"
 import { useDashboardData } from "@/components/dashboard-data"
+import { AideWorkerAssignmentPanel, type WorkerSwitchAvailability } from "@/components/aide-worker-assignment"
 import { JobHistoryModal } from "@/components/job-history-modal"
 import { Panel } from "@/components/panel"
 import { AccessDenied, Skeleton, SkeletonGroup } from "@/components/skeleton"
@@ -14,7 +15,9 @@ import {
     formatAideDateTime,
     formatAideDuration,
     formatAideLogTime,
+    jobLabel,
 } from "@/lib/aide-status-format"
+import { SECTION_ANCHORS } from "@/lib/section-anchors"
 import { cn } from "@/lib/utils"
 import type {
     AideCache,
@@ -298,13 +301,6 @@ function ErrorPanel({ snapshot, now }: { snapshot: AideStatusSnapshot; now: numb
     )
 }
 
-function jobLabel(job: AideJob): string {
-    if (!job.lastRun) return AIDE_SEVERITY_LABEL[job.severity]
-    if (!job.lastRun.ok) return "失敗"
-    // 成功しているが間隔ぶん動いていない。「成功」のまま黄色にすると何が悪いのか読めない
-    return job.severity === "warn" ? "遅れ" : "成功"
-}
-
 function JobsPanel({ jobs }: { jobs: AideJob[] }) {
     const [selectedName, setSelectedName] = useState<string | null>(null)
     const closeModal = useCallback(() => setSelectedName(null), [])
@@ -317,6 +313,7 @@ function JobsPanel({ jobs }: { jobs: AideJob[] }) {
     return (
         <Panel
             title="定期ジョブ"
+            id={SECTION_ANCHORS.aideJobs}
             className="md:col-span-2 xl:col-span-8"
             trailing={
                 <>
@@ -687,6 +684,7 @@ function ConnectorsPanel({ connectors, now }: { connectors: AideConnector[]; now
     return (
         <Panel
             title="接続先"
+            id={SECTION_ANCHORS.aideConnectors}
             className="xl:col-span-8"
             trailing={
                 <>
@@ -731,17 +729,26 @@ function ConnectorsPanel({ connectors, now }: { connectors: AideConnector[]; now
  *
  * 判定（正常・注意・異常）はAIDE側が持ち、ここは並べ方と色だけを決める。
  */
-export function AideStatus() {
+export function AideStatus({ workerSwitch }: { workerSwitch: WorkerSwitchAvailability }) {
     const { aideStatus: snapshot, now } = useDashboardData()
     return (
         <div className="space-y-3">
-            <AideStatusView snapshot={snapshot} now={now} />
+            <AideStatusView snapshot={snapshot} now={now} workerSwitch={workerSwitch} />
         </div>
     )
 }
 
 /** 取得済みの状態を並べる本体。取得元（DashboardDataProvider）から切り離し、確認用の画面からも描画できるようにしている */
-export function AideStatusView({ snapshot, now }: { snapshot: AideStatusSnapshot | null; now: number }) {
+export function AideStatusView({
+    snapshot,
+    now,
+    workerSwitch,
+}: {
+    snapshot: AideStatusSnapshot | null
+    now: number
+    /** 担当ホストの切り替えを出せるか（#668）。管理者で、切り替え用トークンがあるときだけ available */
+    workerSwitch: WorkerSwitchAvailability
+}) {
 
     if (!snapshot) {
         return (
@@ -769,9 +776,17 @@ export function AideStatusView({ snapshot, now }: { snapshot: AideStatusSnapshot
         <div className="space-y-3">
             <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 xl:grid-cols-12">
                 {snapshot.status === "error" && <ErrorPanel snapshot={snapshot} now={now} />}
+                {health && <OverviewPanel health={health} />}
+                {snapshot.workerAssignment && (
+                    <AideWorkerAssignmentPanel
+                        snapshot={snapshot.workerAssignment}
+                        now={now}
+                        availability={workerSwitch}
+                        className="md:col-span-2 xl:col-span-12"
+                    />
+                )}
                 {health && (
                     <>
-                        <OverviewPanel health={health} />
                         <ServerPanel health={health} />
                         <JobsPanel jobs={health.jobs} />
                         <AccessPanel access={health.mcpAccess} now={now} />
