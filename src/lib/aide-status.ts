@@ -1,3 +1,4 @@
+import { parseWorkerAssignment } from "@/lib/aide-worker-assignment"
 import { resolveSharedToken, type SharedTokenCacheEntry } from "@/lib/shared-token"
 import { fetchWithTimeout, isPermissionStatus } from "@/lib/upstream"
 import type {
@@ -5,6 +6,9 @@ import type {
     AideProbeResponse,
     AideProbeResult,
     AideStatusSnapshot,
+    AideAssignmentMode,
+    AideWorkerAssignment,
+    AideWorkerAssignmentSnapshot,
 } from "@/types/aide-status"
 
 /**
@@ -93,6 +97,22 @@ async function requestAideWithRefresh(
 }
 
 /**
+ * 担当ホストの切り替えに使うトークン（#668）。AIDE側の `AIDE_WORKER_CONTROL_SECRET` と同じ値。
+ *
+ * **読み取りの `AIDE_STATUS_TOKEN` とは別にしている。** 動作状況を見るだけのトークンで担当まで
+ * 変えられないよう、AIDE側が切り替えだけを別のシークレットで受けるため。AIDE側が環境変数で
+ * しか読まないので、共有トークンAPIではなく環境変数で受け取る。戻り値をログ・レスポンスへ出さないこと
+ */
+function readWorkerControlToken(): string | null {
+    return process.env.AIDE_WORKER_CONTROL_TOKEN || null
+}
+
+/** 画面に切り替えの操作を出すか。値を検証せず、設定があるかだけを見る */
+export function isAideWorkerControlConfigured(): boolean {
+    return readWorkerControlToken() !== null
+}
+
+/**
  * 未設定の環境（worktree・開発機）ではタブごと出さない。ページ側で判定に使う同期関数のため
  * 実際には取得を試みず、取得できる見込み（共有トークンAPIの設定）が
  * あるかだけで判定する
@@ -128,16 +148,20 @@ function describeFailure(error: unknown, timeoutMs: number): string {
 }
 
 async function requestAide(
-    config: AideConfig,
+    config: Pick<AideConfig, "baseUrl" | "token">,
     path: string,
     method: "GET" | "POST",
-    timeoutMs: number
+    timeoutMs: number,
+    body?: unknown
 ): Promise<unknown> {
+    const headers: Record<string, string> = { authorization: `Bearer ${config.token}`, accept: "application/json" }
+    if (body !== undefined) headers["content-type"] = "application/json"
     const res = await fetchWithTimeout(
         `${config.baseUrl}${path}`,
         {
             method,
-            headers: { authorization: `Bearer ${config.token}`, accept: "application/json" },
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
         },
         timeoutMs
     )
@@ -177,6 +201,83 @@ function isStatusPayload(payload: unknown): payload is { health: AideHealth; too
  */
 let lastGood: { health: AideHealth; tools: string[]; fetchedAt: string } | null = null
 
+/** 担当ホストの直前の値。動作状況と同じく、取得に失敗しても画面に残す */
+let lastAssignment: { assignment: AideWorkerAssignment; fetchedAt: string } | null = null
+
+const ASSIGNMENT_PATH = "/api/worker/assignment"
+
+/** 担当ホストのAPIだけ404の意味が違う（#891 のリリース前） */
+const ASSIGNMENT_HTTP_HINTS: Record<number, string> = {
+    ...HTTP_HINTS,
+    404: "AIDEに担当ホストのAPIがありません（guchi-apps/aide#891）",
+}
+
+function describeAssignmentFailure(error: unknown, timeoutMs: number): string {
+    if (error instanceof AideHttpError) {
+        const hint = ASSIGNMENT_HTTP_HINTS[error.status]
+        return hint ? `HTTP ${error.status}（${hint}）` : `HTTP ${error.status}`
+    }
+    return describeFailure(error, timeoutMs)
+}
+
+function assignmentSnapshot(assignment: AideWorkerAssignment, fetchedAt: string): AideWorkerAssignmentSnapshot {
+    lastAssignment = { assignment, fetchedAt }
+    return { status: "ok", assignment, assignmentFetchedAt: fetchedAt }
+}
+
+function assignmentError(message: string): AideWorkerAssignmentSnapshot {
+    return {
+        status: "error",
+        message,
+        assignment: lastAssignment?.assignment ?? null,
+        assignmentFetchedAt: lastAssignment?.fetchedAt ?? null,
+    }
+}
+
+/** 担当ホストの取得（#668）。動作状況の取得と並べて呼び、失敗しても動作状況の表示は落とさない */
+async function fetchWorkerAssignment(config: AideConfig, fetchedAt: string): Promise<AideWorkerAssignmentSnapshot> {
+    try {
+        const payload = await requestAideWithRefresh(config, ASSIGNMENT_PATH, "GET", STATUS_TIMEOUT_MS)
+        const assignment = parseWorkerAssignment(payload)
+        if (!assignment) throw new SyntaxError("unexpected payload")
+        return assignmentSnapshot(assignment, fetchedAt)
+    } catch (error) {
+        console.error("AIDE worker assignment error:", error)
+        return assignmentError(describeAssignmentFailure(error, STATUS_TIMEOUT_MS))
+    }
+}
+
+export type SetWorkerAssignmentResult =
+    | { status: "ok"; assignment: AideWorkerAssignment }
+    | { status: "unconfigured" | "error"; message: string }
+
+/**
+ * 担当ホストのモードを変える（#668）。**呼ぶ側で管理者のセッションとCSRFを確かめてから呼ぶこと。**
+ * AIDEが返した切り替え後の状態をそのまま返し、こちらでは何も記録しない（状態の正はAIDE）
+ */
+export async function setAideWorkerAssignmentMode(mode: AideAssignmentMode): Promise<SetWorkerAssignmentResult> {
+    const token = readWorkerControlToken()
+    if (!token) return { status: "unconfigured", message: "AIDE_WORKER_CONTROL_TOKEN が未設定のため切り替えられません" }
+
+    const baseUrl = (process.env.AIDE_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "")
+    try {
+        const payload = await requestAide({ baseUrl, token }, ASSIGNMENT_PATH, "POST", STATUS_TIMEOUT_MS, { mode })
+        const assignment = parseWorkerAssignment(payload)
+        if (!assignment) throw new SyntaxError("unexpected payload")
+        assignmentSnapshot(assignment, new Date().toISOString())
+        return { status: "ok", assignment }
+    } catch (error) {
+        console.error("AIDE worker assignment update error:", error)
+        if (error instanceof AideHttpError && error.status === 401) {
+            return { status: "error", message: "HTTP 401（AIDE_WORKER_CONTROL_TOKEN がAIDE側の値と一致していません）" }
+        }
+        if (error instanceof AideHttpError && error.status === 503) {
+            return { status: "error", message: "HTTP 503（AIDE側で AIDE_WORKER_CONTROL_SECRET が未設定です）" }
+        }
+        return { status: "error", message: describeAssignmentFailure(error, STATUS_TIMEOUT_MS) }
+    }
+}
+
 export async function getAideStatusSnapshot(): Promise<AideStatusSnapshot> {
     const fetchedAt = new Date().toISOString()
     const { config, ...rest } = await readAideConfig()
@@ -189,9 +290,12 @@ export async function getAideStatusSnapshot(): Promise<AideStatusSnapshot> {
             tools: lastGood?.tools ?? [],
             fetchedAt,
             healthFetchedAt: lastGood?.fetchedAt ?? null,
+            workerAssignment: unavailable ? assignmentError(UNAVAILABLE_MESSAGE) : undefined,
         }
     }
 
+    // 担当ホストは別のAPIなので並べて取り、片方の失敗でもう片方を落とさない
+    const assignmentPromise = fetchWorkerAssignment(config, fetchedAt)
     try {
         const payload = await requestAideWithRefresh(config, "/api/status", "GET", STATUS_TIMEOUT_MS)
         if (!isStatusPayload(payload)) throw new SyntaxError("unexpected payload")
@@ -203,6 +307,7 @@ export async function getAideStatusSnapshot(): Promise<AideStatusSnapshot> {
             tools: payload.tools,
             fetchedAt,
             healthFetchedAt: fetchedAt,
+            workerAssignment: await assignmentPromise,
         }
     } catch (error) {
         console.error("AIDE status error:", error)
@@ -214,6 +319,7 @@ export async function getAideStatusSnapshot(): Promise<AideStatusSnapshot> {
             tools: lastGood?.tools ?? [],
             fetchedAt,
             healthFetchedAt: lastGood?.fetchedAt ?? null,
+            workerAssignment: await assignmentPromise,
         }
     }
 }

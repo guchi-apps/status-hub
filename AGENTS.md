@@ -204,6 +204,22 @@ AIDEタブは `aide.gucchii.com/status` と同じ内容を、AIDEの `GET /api/s
   **こちらで履歴を貯め直す形にはしない**（AIDE側が正）。モーダルは、タブ切り替えの transform の中では
   `fixed` が画面基準にならないため `createPortal` で body 直下に出している
 
+### 定期ジョブの担当ホスト（#668）
+
+AIDEタブの「定期ジョブの担当ホスト」は、AIDEの `GET/POST /api/worker/assignment`（guchi-apps/aide#891）を
+読んで出し、切り替えを中継するだけ。**担当の状態の正はAIDE（VPS）にあり、StatusHubに複製や記録を持たない。**
+
+- 表示は `/api/aide-status` の取得に相乗りし（`workerAssignment`）、読み取りは `AIDE_STATUS_TOKEN` を流用する。
+  担当ホストの取得だけ失敗しても、動作状況のほうは落とさない
+- **切り替えは別のトークン `AIDE_WORKER_CONTROL_TOKEN`**（AIDE側の `AIDE_WORKER_CONTROL_SECRET` と同じ値。1Passwordは
+  `op://apps/aide/worker-control-secret` を直接参照）。AIDEが環境変数でしか読まないため、共有トークンAPIではなく環境変数で受ける。
+  読み取りのトークンで切り替えまで通る形にしない
+- `POST /api/aide-status/worker-assignment` は共通アクセス設定の**管理者だけ**（`requireAdminForApi`＋`rejectCrossSiteRequest`）。
+  管理者以外・トークン未設定では画面に切り替えの操作を出さない
+- 閾値（引き継ぎ15分・戻し30分）はAIDEの応答の `policy` を使い、こちらで値を持たない。見通しの文は `src/lib/aide-worker-assignment.ts` の
+  `hostOutlook` で、AIDEの `evaluate` と同じ順に読む。AIDE側の判定を変えたら合わせる
+- 固定中（`mode` が `auto` 以外）はタブ帯の「AIDE」に「固定」を出す（解除し忘れに気づけるように）
+
 ## 監視モニターの表示名の変更
 
 監視タブのカードの鉛筆ボタンで、モニターの表示名を変えられる（#479）。**名前はこのダッシュボードの

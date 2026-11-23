@@ -142,6 +142,49 @@ export interface AideStatusSnapshot {
     fetchedAt: string
     /** health を取得できた時刻。失敗して古い値を出しているときは fetchedAt より前になる */
     healthFetchedAt: string | null
+    /**
+     * worker ジョブの担当ホスト（#668）。動作状況と同時に取得する。
+     * 共有トークンAPIが未設定（status が unconfigured）のときは載せない
+     */
+    workerAssignment?: AideWorkerAssignmentSnapshot
+}
+
+/**
+ * worker ジョブの担当ホスト（guchi-apps/aide#891 の `GET /api/worker/assignment`）。
+ *
+ * **応答の形の正はAIDE側**（`src/api/worker-assignment.ts` の `AssignmentView`）。ここはその写しで、
+ * AIDE側を変えたら合わせ直す。状態はAIDEにだけあり、StatusHubは複製を持たない。
+ */
+export type AideWorkerHost = "subpc" | "macmini"
+export type AideAssignmentMode = "auto" | AideWorkerHost
+export type AideSwitchReason = "failover" | "failback" | "manual"
+
+export interface AideWorkerHostView {
+    host: AideWorkerHost
+    /** 最終問い合わせが引き継ぎの閾値（policy.failoverAfterMinutes）以内か */
+    alive: boolean
+    lastSeenAt: string | null
+    /** 問い合わせが途切れずに続いている起点 */
+    aliveSince: string | null
+}
+
+export interface AideWorkerAssignment {
+    mode: AideAssignmentMode
+    owner: AideWorkerHost
+    hosts: AideWorkerHostView[]
+    lastSwitch: { at: string; from: AideWorkerHost; to: AideWorkerHost; reason: AideSwitchReason } | null
+    modeChangedAt: string | null
+    policy: { failoverAfterMinutes: number; failbackAfterMinutes: number; continuityGapMinutes: number }
+}
+
+export interface AideWorkerAssignmentSnapshot {
+    status: "ok" | "error"
+    /** status が error のときの理由 */
+    message?: string
+    /** 取得に失敗しても、直前に取得できた値があれば残す */
+    assignment: AideWorkerAssignment | null
+    /** assignment を取得できた時刻 */
+    assignmentFetchedAt: string | null
 }
 
 export interface AideProbeResult {

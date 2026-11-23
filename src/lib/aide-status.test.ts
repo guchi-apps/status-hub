@@ -1,6 +1,11 @@
 import assert from "node:assert/strict"
 import { afterEach, describe, it, mock } from "node:test"
-import { getAideStatusSnapshot, isAideStatusConfigured, runAideStatusChecks } from "@/lib/aide-status"
+import {
+    getAideStatusSnapshot,
+    isAideStatusConfigured,
+    runAideStatusChecks,
+    setAideWorkerAssignmentMode,
+} from "@/lib/aide-status"
 
 /**
  * 環境変数へのフォールバックは無い（#610）。ここでは未設定・取得失敗の振る舞いだけを確かめる。
@@ -107,6 +112,73 @@ describe("getAideStatusSnapshot: 共有トークンAPI", () => {
 
             assert.equal(snapshot.status, "error")
             assert.match(snapshot.message ?? "", /issue-deck/)
+        } finally {
+            restore()
+        }
+    })
+})
+
+describe("setAideWorkerAssignmentMode", () => {
+    const assignmentPayload = {
+        mode: "macmini",
+        owner: "macmini",
+        hosts: [],
+        lastSwitch: { at: "2026-11-23T00:00:00.000Z", from: "subpc", to: "macmini", reason: "manual" },
+        modeChangedAt: "2026-11-23T00:00:00.000Z",
+        policy: { failoverAfterMinutes: 15, failbackAfterMinutes: 30, continuityGapMinutes: 10 },
+    }
+
+    function withControlToken(value: string | undefined) {
+        const previous = process.env.AIDE_WORKER_CONTROL_TOKEN
+        if (value === undefined) delete process.env.AIDE_WORKER_CONTROL_TOKEN
+        else process.env.AIDE_WORKER_CONTROL_TOKEN = value
+        return () => {
+            if (previous === undefined) delete process.env.AIDE_WORKER_CONTROL_TOKEN
+            else process.env.AIDE_WORKER_CONTROL_TOKEN = previous
+        }
+    }
+
+    it("切り替え用トークンが無ければAIDEへ送らない", async () => {
+        const restore = withControlToken(undefined)
+        const fetchMock = stubFetch(() => Response.json({}))
+        try {
+            const result = await setAideWorkerAssignmentMode("macmini")
+            assert.equal(result.status, "unconfigured")
+            assert.equal(fetchMock.mock.callCount(), 0)
+        } finally {
+            restore()
+        }
+    })
+
+    it("切り替え用トークン（読み取りのトークンとは別）でモードをPOSTし、AIDEの結果を返す", async () => {
+        const restoreEnv = setEnv({ AIDE_BASE_URL: "http://aide.test/" })
+        const restore = withControlToken("control-token")
+        const calls: { url: string; init?: RequestInit }[] = []
+        stubFetch((url, init) => {
+            calls.push({ url, init })
+            return Response.json(assignmentPayload)
+        })
+        try {
+            const result = await setAideWorkerAssignmentMode("macmini")
+            assert.equal(result.status, "ok")
+            assert.equal(result.status === "ok" && result.assignment.owner, "macmini")
+            assert.equal(calls[0]?.url, "http://aide.test/api/worker/assignment")
+            assert.equal(calls[0]?.init?.method, "POST")
+            assert.equal((calls[0]?.init?.headers as Record<string, string>).authorization, "Bearer control-token")
+            assert.equal(calls[0]?.init?.body, JSON.stringify({ mode: "macmini" }))
+        } finally {
+            restore()
+            restoreEnv()
+        }
+    })
+
+    it("401はトークンのずれとして返す", async () => {
+        const restore = withControlToken("wrong")
+        stubFetch(() => new Response("{}", { status: 401 }))
+        try {
+            const result = await setAideWorkerAssignmentMode("auto")
+            assert.equal(result.status, "error")
+            assert.match(result.status === "error" ? result.message : "", /AIDE_WORKER_CONTROL_TOKEN/)
         } finally {
             restore()
         }
