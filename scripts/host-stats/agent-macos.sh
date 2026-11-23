@@ -77,6 +77,37 @@ collect_memory() {
     usage_json "$used" "$total"
 }
 
+# 物理NIC（en0・en1…）の受信・送信バイト数の累積。netstat -ib はIFごとにリンク層（Network列が
+# <Link#N>）の行とIPアドレスごとの行を出し、後者は同じ値の重複なのでリンク層の行だけを数える。
+# lo0・utun・awdl・bridge などの仮想IFは名前が en で始まらないので対象外。
+# 列は Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll で、Addressが空の
+# 行は列が1つ減る。en は必ずMACアドレスを持つため、Ibytes=$7・Obytes=$10 で読める
+read_network_sample() {
+    netstat -ib 2>/dev/null | awk '
+        $1 ~ /^en[0-9]+$/ && $3 ~ /^<Link#/ && NF >= 10 {
+            rx += $7
+            tx += $10
+        }
+        END { printf "%.0f %.0f", rx, tx }
+    '
+}
+
+# 1秒あけて2回読んだ累積値の差分を秒あたりに直す。カウンタが巻き戻ったときは0にする（agent.shと同じ）
+collect_network() {
+    local first second
+    first="$(read_network_sample)"
+    sleep "$SAMPLE_SECONDS"
+    second="$(read_network_sample)"
+    awk -v first="$first" -v second="$second" -v seconds="$SAMPLE_SECONDS" 'BEGIN {
+        split(first, a, " "); split(second, b, " ")
+        in_rate = (b[1] - a[1]) / seconds
+        out_rate = (b[2] - a[2]) / seconds
+        if (in_rate < 0) in_rate = 0
+        if (out_rate < 0) out_rate = 0
+        printf "{\"inBytesPerSecond\":%d,\"outBytesPerSecond\":%d}", in_rate, out_rate
+    }'
+}
+
 # Swapを使っていない（ページアウトが無い）マシンでは何も出力しない（ダッシュボード側でカードごと省かれる）
 collect_swap() {
     local line total used
@@ -169,6 +200,7 @@ build_payload() {
     printf '"memory":%s,' "$(collect_memory)"
     [ -z "$swap" ] || printf '"swap":%s,' "$swap"
     printf '"disks":%s,' "$(collect_disks)"
+    printf '"network":%s,' "$(collect_network)"
     printf '"loadAverage":[%s],' "$(collect_load_average)"
     printf '"uptimeSeconds":%d,' "$(collect_uptime_seconds)"
     printf '"sessions":%s' "$(collect_sessions)"
