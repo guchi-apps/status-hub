@@ -20,6 +20,7 @@ import { SectionHeading } from "@/components/section-heading"
 import { Sparkline } from "@/components/sparkline"
 import { describeCpu, formatAge, formatBytes, formatUptime } from "@/lib/host-stats/format"
 import { pickSeries as pick, sumSeries } from "@/lib/host-stats/history"
+import { hostAnchorId } from "@/lib/section-anchors"
 import { cn } from "@/lib/utils"
 import type { HostStatsHostView } from "@/types/host-stats"
 
@@ -113,7 +114,7 @@ function HostSection({
     const labelFor = (kind: HostDetailKind) => `${host.label} の ${HOST_DETAIL_TITLES[kind]} の詳細を開く`
 
     return (
-        <section className="space-y-3 sm:space-y-4">
+        <section id={hostAnchorId(host.id)} className="scroll-mt-28 space-y-3 sm:space-y-4">
             <SectionHeading
                 title={host.label}
                 trailing={
