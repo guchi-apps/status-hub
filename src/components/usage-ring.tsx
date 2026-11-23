@@ -48,10 +48,17 @@ export function UsageRing({
                     dominantBaseline="central"
                     fill="currentColor"
                     className="font-mono"
-                    fontSize={percent === null ? 22 : percent >= 100 ? 20 : 24}
+                    fontSize={percent === null ? 18 : percent >= 100 ? 17 : 19}
                     fontWeight="700"
                 >
-                    {percent === null ? "—" : `${percent}%`}
+                    {percent === null ? (
+                        "—"
+                    ) : (
+                        <>
+                            {percent}
+                            <tspan fontSize="11">%</tspan>
+                        </>
+                    )}
                 </text>
             </svg>
             <div className="mt-0.5 text-[9px] uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
