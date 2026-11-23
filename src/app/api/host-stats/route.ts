@@ -4,6 +4,7 @@ import { requireSessionOrApiToken, tokenMatches } from "@/lib/session"
 import { getAiUsageSnapshot } from "@/lib/ai-usage"
 import { HostStatsReportError, parseHostStatsReport } from "@/lib/host-stats/report"
 import { getHostStatsView, saveHostStatsReport } from "@/lib/host-stats/store"
+import { resolveHostLabel } from "@/lib/host-stats/display-label"
 import { processTimerAlerts } from "@/lib/host-stats/timer-alerts"
 import { settleCloseRequests, settleCloseStaleRequest } from "@/lib/host-stats/close-requests"
 import { settleCleanupRequests } from "@/lib/host-stats/cleanup-requests"
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
         try {
             await processTimerAlerts({
                 hostId: report.id,
-                hostLabel: report.label || report.hostname,
+                hostLabel: resolveHostLabel(report.id, report.label, report.hostname),
                 timers: report.timers,
             })
         } catch (error) {

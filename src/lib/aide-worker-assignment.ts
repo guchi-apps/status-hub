@@ -20,7 +20,7 @@ export const WORKER_HOSTS: readonly AideWorkerHost[] = ["subpc", "macmini"]
 export const PRIMARY_WORKER_HOST: AideWorkerHost = "subpc"
 
 export const WORKER_HOST_LABEL: Record<AideWorkerHost, string> = {
-    subpc: "サブPC",
+    subpc: "DeskMini",
     macmini: "Mac mini",
 }
 
@@ -28,7 +28,7 @@ export const ASSIGNMENT_MODES: readonly AideAssignmentMode[] = ["auto", "subpc",
 
 export const ASSIGNMENT_MODE_LABEL: Record<AideAssignmentMode, string> = {
     auto: "自動",
-    subpc: "サブPCに固定",
+    subpc: "DeskMiniに固定",
     macmini: "Mac miniに固定",
 }
 

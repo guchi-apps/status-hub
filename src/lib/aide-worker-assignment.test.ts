@@ -101,7 +101,7 @@ describe("hostOutlook", () => {
             ],
         })
         const outlook = hostOutlook(assignment, hostOf(assignment, "macmini"), NOW)
-        assert.match(outlook.text, /サブPCも止まっているため移り先なし/)
+        assert.match(outlook.text, /DeskMiniも止まっているため移り先なし/)
     })
 
     it("自動・担当でない主ホストは、続いた時間を戻しの閾値で測る", () => {
@@ -113,7 +113,7 @@ describe("hostOutlook", () => {
             ],
         })
         const outlook = hostOutlook(assignment, hostOf(assignment, "subpc"), NOW)
-        assert.equal(outlook.text, "連続 18分 / 30分でサブPCへ戻します")
+        assert.equal(outlook.text, "連続 18分 / 30分でDeskMiniへ戻します")
         assert.equal(outlook.progress, 18 / 30)
         assert.equal(outlook.tone, "warn")
     })
