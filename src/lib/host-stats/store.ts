@@ -8,6 +8,7 @@ import type {
     HostStatsView,
 } from "@/types/host-stats"
 import { evaluateSensors, getSensorStaleAfterSeconds } from "@/lib/host-stats/sensors"
+import { resolveHostLabel } from "@/lib/host-stats/display-label"
 import { readPendingCleanup } from "@/lib/host-stats/cleanup-requests"
 
 /**
@@ -251,7 +252,7 @@ function toHostView(
     const judged = judgeHostOnline(latest.receivedAt, now, offlineAfterSeconds)
     return {
         id,
-        label: latest.label || latest.hostname,
+        label: resolveHostLabel(id, latest.label, latest.hostname),
         latest,
         ...judged,
         history,
