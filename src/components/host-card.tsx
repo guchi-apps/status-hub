@@ -1,11 +1,13 @@
 "use client"
 
 import { getUsageColor } from "@/components/metric-card"
+import { OpenButton } from "@/components/panel"
 import { Sparkline } from "@/components/sparkline"
 import { StatusBadge, StatusDot, type StatusTone } from "@/components/status-badge"
 import { formatAge, formatBytes, formatUptime } from "@/lib/host-stats/format"
 import { pickSeries } from "@/lib/host-stats/history"
 import { describeTimer, evaluateTimers, type TimerState, type TimerStatus } from "@/lib/host-stats/timers"
+import { shouldJumpOnClick } from "@/lib/section-anchors"
 import { cn } from "@/lib/utils"
 import type { HostSensorState, HostSensorsView, HostStatsHostView } from "@/types/host-stats"
 
@@ -178,9 +180,12 @@ function SensorList({ sensors }: { sensors: HostSensorsView | undefined }) {
 export function HostCard({
     host,
     historyHours,
+    onOpen,
 }: {
     host: HostStatsHostView
     historyHours: number
+    /** ホストタブの該当ホストへ移動する（#682）。カード全体と見出し右のボタンから呼ぶ */
+    onOpen?: () => void
 }) {
     const { latest, history, online } = host
 
@@ -242,7 +247,22 @@ export function HostCard({
     const timerStatuses = evaluateTimers(latest.timers)
 
     return (
-        <div className={cn("h-full rounded-xl border border-border bg-card p-3", !online && "opacity-70")}>
+        <div
+            className={cn(
+                "h-full rounded-xl border border-border bg-card p-3",
+                !online && "opacity-70",
+                onOpen && "cursor-pointer transition-colors hover:border-highlight/50"
+            )}
+            onClick={
+                onOpen
+                    ? (event) => {
+                          if (shouldJumpOnClick(event.target as Element, !!window.getSelection()?.toString())) {
+                              onOpen()
+                          }
+                      }
+                    : undefined
+            }
+        >
             <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <StatusDot tone={online ? "ok" : "danger"} />
                 <span className="text-sm font-bold">{host.label}</span>
@@ -254,9 +274,15 @@ export function HostCard({
                         応答なし
                     </span>
                 )}
-                <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
+                <span
+                    className={cn(
+                        "truncate font-mono text-[10px] text-muted-foreground",
+                        !onOpen && "ml-auto"
+                    )}
+                >
                     稼働 {formatUptime(latest.uptimeSeconds)} · 受信 {formatAge(host.ageSeconds)}
                 </span>
+                {onOpen && <OpenButton onOpen={onOpen} label={`${host.label} の詳細をホストタブで開く`} />}
             </div>
 
             <div className="grid grid-cols-3 gap-2">

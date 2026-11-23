@@ -26,6 +26,7 @@ import { UsageNotifications } from "@/components/usage-notifications"
 import { AIDE_SEVERITY_TONE } from "@/lib/aide-status-format"
 import { formatAge } from "@/lib/host-stats/format"
 import { collectTmuxSessions, summarizeTmux } from "@/lib/host-stats/tmux"
+import { SECTION_ANCHORS, hostAnchorId } from "@/lib/section-anchors"
 import { cn } from "@/lib/utils"
 
 /** 選んだタブは端末ごとに覚える。毎回「概要」に戻ると、見たい場所へ都度たどり直すことになる */
@@ -244,6 +245,41 @@ export function DashboardShell({
         }
     }, [activeTab])
 
+    // 概要のカードから詳細タブの該当箇所へ移動する（#682）。
+    // タブを切り替えて描画が済んでからでないと移動先が無いため、行き先を覚えて描画後に処理する
+    const pendingJump = useRef<{ tab: TabId; anchorId: string } | null>(null)
+    const goToSection = useCallback((tab: TabId, anchorId: string) => {
+        pendingJump.current = { tab, anchorId }
+        storeActiveTab(tab)
+    }, [])
+
+    useEffect(() => {
+        const jump = pendingJump.current
+        if (!jump || jump.tab !== activeTab) return
+        pendingJump.current = null
+
+        let attempts = 0
+        let frame = 0
+        let timer: number | undefined
+        const run = () => {
+            const target = document.getElementById(jump.anchorId)
+            if (!target) {
+                // 取得前の骨組みなど、まだ移動先が描かれていないときは数回だけ待つ
+                if (attempts++ < 10) frame = requestAnimationFrame(run)
+                return
+            }
+            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" })
+            target.classList.add("jump-highlight")
+            timer = window.setTimeout(() => target.classList.remove("jump-highlight"), 1500)
+        }
+        frame = requestAnimationFrame(run)
+        return () => {
+            cancelAnimationFrame(frame)
+            window.clearTimeout(timer)
+        }
+    }, [activeTab])
+
     const hosts = useMemo(() => hostStats?.hosts ?? [], [hostStats])
     const tmuxSessions = useMemo(() => collectTmuxSessions(hosts, now), [hosts, now])
     const tmuxSummary = useMemo(() => summarizeTmux(hosts, tmuxSessions), [hosts, tmuxSessions])
@@ -359,7 +395,11 @@ export function DashboardShell({
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12">
                         {hosts.map((host) => (
                             <div key={host.id} className={hostSpan}>
-                                <HostCard host={host} historyHours={hostStats?.historyHours ?? 24} />
+                                <HostCard
+                                    host={host}
+                                    historyHours={hostStats?.historyHours ?? 24}
+                                    onOpen={() => goToSection("hosts", hostAnchorId(host.id))}
+                                />
                             </div>
                         ))}
 
@@ -367,12 +407,14 @@ export function DashboardShell({
                             <Panel
                                 title="tmux セッション"
                                 className={hosts.length >= 2 ? "xl:col-span-4" : "xl:col-span-6"}
+                                onOpen={() => goToSection("tmux", SECTION_ANCHORS.tmux)}
+                                openLabel="tmux セッションの詳細をtmuxタブで開く"
                                 trailing={
                                     <>
                                         <StatusBadge tone={tmuxSummary.running > 0 ? "ok" : "neutral"}>
                                             稼働 {tmuxSummary.running}
                                         </StatusBadge>
-                                        <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+                                        <span className="font-mono text-[10px] text-muted-foreground">
                                             入力待ち {tmuxSummary.waiting} · 待機{" "}
                                             {tmuxSummary.idle + tmuxSummary.stale} · 全
                                             {tmuxSummary.total}件
@@ -406,8 +448,10 @@ export function DashboardShell({
                             <Panel
                                 title="AI 使用状況"
                                 className="xl:col-span-3"
+                                onOpen={() => goToSection("usage", SECTION_ANCHORS.aiUsage)}
+                                openLabel="AI 使用状況の詳細を利用枠タブで開く"
                                 trailing={
-                                    <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+                                    <span className="font-mono text-[10px] text-muted-foreground">
                                         {new Date(aiUsage.fetchedAt).toLocaleTimeString("ja-JP", {
                                             hour: "2-digit",
                                             minute: "2-digit",
@@ -419,7 +463,12 @@ export function DashboardShell({
                                 <AiUsageCompact snapshot={aiUsage} now={now} />
                             </Panel>
                         ) : (
-                            <Panel title="AI 使用状況" className="xl:col-span-3">
+                            <Panel
+                                title="AI 使用状況"
+                                className="xl:col-span-3"
+                                onOpen={() => goToSection("usage", SECTION_ANCHORS.aiUsage)}
+                                openLabel="AI 使用状況の詳細を利用枠タブで開く"
+                            >
                                 <SkeletonGroup label="AI使用状況" className="space-y-3">
                                     <SkeletonBar />
                                     <SkeletonBar />
@@ -431,8 +480,10 @@ export function DashboardShell({
                             <Panel
                                 title="GitHub"
                                 className="xl:col-span-3"
+                                onOpen={() => goToSection("usage", SECTION_ANCHORS.githubUsage)}
+                                openLabel="GitHub の詳細を利用枠タブで開く"
                                 trailing={
-                                    <span className="ml-auto truncate font-mono text-[10px] text-muted-foreground">
+                                    <span className="truncate font-mono text-[10px] text-muted-foreground">
                                         {githubUsage.org ?? ""}
                                     </span>
                                 }
@@ -440,7 +491,12 @@ export function DashboardShell({
                                 <GitHubUsageCompact snapshot={githubUsage} now={now} />
                             </Panel>
                         ) : (
-                            <Panel title="GitHub" className="xl:col-span-3">
+                            <Panel
+                                title="GitHub"
+                                className="xl:col-span-3"
+                                onOpen={() => goToSection("usage", SECTION_ANCHORS.githubUsage)}
+                                openLabel="GitHub の詳細を利用枠タブで開く"
+                            >
                                 <SkeletonGroup label="GitHub使用状況" className="space-y-3">
                                     <SkeletonBar />
                                     <SkeletonBar />
@@ -451,6 +507,8 @@ export function DashboardShell({
                         <Panel
                             title="監視"
                             className="md:col-span-2 xl:col-span-6"
+                            onOpen={() => goToSection("monitors", SECTION_ANCHORS.monitors)}
+                            openLabel="監視の詳細を監視タブで開く"
                             trailing={
                                 <>
                                     {monitorStatus.down > 0 && (
@@ -460,7 +518,7 @@ export function DashboardShell({
                                         <StatusBadge tone="danger">取得不可</StatusBadge>
                                     )}
                                     {monitorStatus.text !== null && (
-                                        <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+                                        <span className="font-mono text-[10px] text-muted-foreground">
                                             {monitorStatus.text}
                                         </span>
                                     )}
@@ -482,6 +540,7 @@ export function DashboardShell({
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                         <Panel
                             title="tmux セッション"
+                            id={SECTION_ANCHORS.tmux}
                             className="xl:col-span-2"
                             trailing={
                                 <>
@@ -524,10 +583,12 @@ export function DashboardShell({
                 )}
 
                 {activeTab === "monitors" && (
-                    <MonitorSections
-                        addMonitorUrl={addMonitorUrl}
-                        canAddMonitor={canAddMonitor}
-                    />
+                    <div id={SECTION_ANCHORS.monitors} className="scroll-mt-28">
+                        <MonitorSections
+                            addMonitorUrl={addMonitorUrl}
+                            canAddMonitor={canAddMonitor}
+                        />
+                    </div>
                 )}
 
                 {activeTab === "aide" && (
