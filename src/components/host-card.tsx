@@ -1,6 +1,5 @@
 "use client"
 
-import { OpenButton } from "@/components/panel"
 import { StatusBadge, StatusDot, type StatusTone } from "@/components/status-badge"
 import { UsageRing } from "@/components/usage-ring"
 import { formatAge, formatUptime } from "@/lib/host-stats/format"
@@ -140,32 +139,29 @@ export function HostCard({
                     : undefined
             }
         >
-            <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="mb-2 flex flex-nowrap items-center gap-x-2">
                 <StatusDot tone={online ? "ok" : "danger"} />
-                <span className="text-sm font-bold">{host.label}</span>
-                <span className="truncate font-mono text-[10px] text-muted-foreground">
+                <span className="shrink-0 whitespace-nowrap text-sm font-bold">{host.label}</span>
+                <span
+                    className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground"
+                    title={latest.hostname}
+                >
                     {latest.hostname}
                 </span>
                 {!online && (
-                    <span className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 font-mono text-[9px] font-bold text-red-400">
+                    <span className="shrink-0 whitespace-nowrap rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 font-mono text-[9px] font-bold text-red-400">
                         応答なし
                     </span>
                 )}
-                <span
-                    className={cn(
-                        "truncate font-mono text-[10px] text-muted-foreground",
-                        !onOpen && "ml-auto"
-                    )}
-                >
+                <span className="shrink-0 whitespace-nowrap font-mono text-[10px] text-muted-foreground">
                     稼働 {formatUptime(latest.uptimeSeconds)} · 受信 {formatAge(host.ageSeconds)}
                 </span>
-                {onOpen && <OpenButton onOpen={onOpen} label={`${host.label} の詳細をホストタブで開く`} />}
             </div>
 
             <div className="grid grid-cols-4 gap-2">
                 <UsageRing label="CPU" percent={latest.cpuPercent} />
                 <UsageRing label="Memory" percent={latest.memory.usedPercent} />
-                <UsageRing label="Disk" percent={worstDisk.usedPercent} caption={worstDisk.path} />
+                <UsageRing label="Disk" percent={worstDisk.usedPercent} />
                 <UsageRing
                     label="Swap"
                     percent={hasSwap ? latest.swap!.usedPercent : null}

@@ -14,6 +14,13 @@ export interface ChangelogEntry {
 // 新しいバージョンを配列の先頭に追記していく（changelog-ja skill の運用ルールに従う）
 export const changelog: ChangelogEntry[] = [
     {
+        version: "0.61.1",
+        date: "2026-11-24",
+        changes: [
+            "ホストの概要に出る円グラフの表示崩れを直しました。概要カードにあった「詳細」バッジと、カードを移動した後に出る青い枠をなくし、見た目をすっきりさせました。",
+        ],
+    },
+    {
         version: "0.61.0",
         date: "2026-11-23",
         changes: [

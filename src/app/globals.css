@@ -190,20 +190,3 @@
     grid-template-areas: "feat model calls tok cost";
   }
 }
-
-/* 概要のカードから移動してきた先を、一瞬だけ枠で示す（#682） */
-.jump-highlight {
-  border-radius: 0.75rem;
-  outline: 2px solid var(--highlight, #38bdf8);
-  outline-offset: 6px;
-  animation: jump-highlight-fade 1500ms ease-out forwards;
-}
-
-@keyframes jump-highlight-fade {
-  0%, 70% { outline-color: var(--highlight, #38bdf8); }
-  100% { outline-color: transparent; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .jump-highlight { animation: none; }
-}
